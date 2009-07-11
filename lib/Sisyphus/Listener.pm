@@ -61,6 +61,10 @@ sub listen {
 	my $self = shift;
 	my $clients = $self->{clients};
 
+	# set up application's client_callback. this is how the application lets
+	# us know of data ready for our clients
+	$self->{application}->{client_callback} = sub { $self->client_callback(@_) };
+
 	tcp_server $self->{ip}, $self->{port}, sub {
 		my ($fh, $host, $port) = @_;
 		$self->{livecon} += 1;
@@ -75,8 +79,11 @@ sub listen {
 				#print "read watcher! alert!!\n";
 
 				unless($clients->{$fh}) {
-					#print "trying to make new protocol for this socket.\n";
+					# print "trying to make new protocol for this socket.\n";
 					$clients->{$fh}->{proto} = $self->{protocol}->new();
+					$clients->{$fh}->{proto}->{app_callback} = sub { $self->app_callback($fh, @_) };
+					$clients->{$fh}->{host} = $host;	
+					$clients->{$fh}->{port} = $port;	
 
 					# make a handle, too
 					$clients->{$fh}->{handle} = AnyEvent::Handle->new(
@@ -84,12 +91,18 @@ sub listen {
 						on_error => sub { warn "error talking to client!"; },
 						on_eof => sub { warn "client disconnected!"; },
 						on_drain => sub {
+									# print "on_drain!\n";
 									my $handle = shift;
 									my $fh = $handle->{fh};
 									unless ($fh) { print "on_drain was passed undef fh...\n"; return undef; }
 									my $m = $self->{application}->get_data($fh);
 									unless ($m) { return undef; } # we have a writable fh, but nothing to send... 
 									$m = $clients->{$fh}->{proto}->frame($m);
+
+									# we seem to be called here very early, like before
+									# $clients->{$fh}->{handle} is set. 
+									unless (defined ($clients->{$fh}->{handle})) { return; }
+
 									# getting in to the internals of anyevent...
 									#my $wblen = length($clients->{$fh}->{handle}->{wbuf});
 									#if ($wblen < 1024) {
@@ -123,27 +136,30 @@ sub listen {
 					$clients->{$fh}->{proto}->{buffer} .= $in;
 					my $r = $clients->{$fh}->{proto}->consume();
 					if ($r) {
-						my $w = $self->{application}->message($host, $port, $r, $fh);
+						$self->{application}->message($host, $port, $r, $fh);
+
+						#my $w = $self->{application}->message($host, $port, $r, $fh);
 						#print Dumper $w;
-						if ($w) {
-							# we've given our application some data,
-							# and if we're here, it's indicated that it has something to send on this 
-							# filehandle!
-							foreach my $writable (@$w) {
-								#print "looking at writables\n";
-								#print Dumper $writable;
 						
-								if ($self->{use_push_write}) {	
-									my $m = $self->{application}->get_data($writable);
-									unless ($m) { next; }
-									$m = $clients->{ $writable }->{proto}->frame($m);
-									$clients->{ $writable }->{handle}->push_write($m);	
-								} else {
-									# we only want to peel off a message when the write handle is writable	
-									$self->write_till_empty($writable);
-								}
-							}
-						}
+						#if ($w) {
+						#	# we've given our application some data,
+						##	# and if we're here, it's indicated that it has something to send on this 
+						#	# filehandle!
+						#	foreach my $writable (@$w) {
+						#		#print "looking at writables\n";
+						#		#print Dumper $writable;
+						#
+						#		if ($self->{use_push_write}) {	
+						#			my $m = $self->{application}->get_data($writable);
+						#			unless ($m) { next; }
+						#			$m = $clients->{ $writable }->{proto}->frame($m);
+						#			$clients->{ $writable }->{handle}->push_write($m);	
+						#		} else {
+						#			# we only want to peel off a message when the write handle is writable	
+						#			$self->write_till_empty($writable);
+						#		}
+						#	}
+						#}
 					}
 					return undef;
 
@@ -175,11 +191,15 @@ sub listen {
 sub write_till_empty {
 	my ($self, $writable) = @_;
 
-	unless(defined($self->{outbufs}->{$writable})) { $self->{outbufs}->{$writable} = ''; }
+	unless(defined($self->{outbufs}->{$writable})) {
+		$self->{outbufs}->{$writable} = '';
+	}
+
 	my $w; $w = AnyEvent->io (fh => $writable, poll => 'w', cb => sub {
 		# if we don't have anything in the buffer, go get exactly one message
 		unless (length($self->{outbufs}->{$writable})) {
-			#print "empty wbuf, getting a message from application...\n";
+			print "empty wbuf, getting a message from application, writable is\n";
+			print Dumper $writable;
 			my $m = $self->{application}->get_data($writable);
 			$m = $self->{clients}->{$writable}->{proto}->frame($m);
 			$self->{outbufs}->{$writable} .= $m;
@@ -203,6 +223,48 @@ sub write_till_empty {
 			undef $w;
 		}
 	});
+}
+
+# can be called at any time by a Protocol instance. Asynchronous notification
+# of data available for our Application
+sub app_callback {
+	my ($self, $fh, @dat) = @_;
+
+	print "dat in app_callback:\n";
+	print Dumper \@dat;
+
+	my $host = $self->{clients}->{$fh}->{host};
+	my $port= $self->{clients}->{$fh}->{port};
+
+	my $w = $self->{application}->message($host, $port, \@dat, $fh);
+}
+
+# called at any time by our Application instance. indicates app has data ready 
+# for this client
+sub client_callback {						
+	my $self = shift;
+	my $w = shift;
+
+	my $clients = $self->{clients};
+
+	# if we're here, our app has indicated that it has something to send on this 
+	# filehandle!
+	foreach my $writable (@$w) {
+		print "looking at writables\n";
+		print Dumper $writable;
+
+		if ($self->{use_push_write}) {	
+			my $m = $self->{application}->get_data($writable);
+			print "did i get data? $m\n";
+			unless ($m) { next; }
+			$m = $clients->{ $writable }->{proto}->frame($m);
+			$clients->{ $writable }->{handle}->push_write($m);	
+		} else {
+			# we only want to peel off a message when the write handle is writable
+			print "calling write_till_empty\n";
+			$self->write_till_empty($writable);
+		}
+	}
 }
 
 =head1 AUTHOR

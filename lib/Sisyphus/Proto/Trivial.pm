@@ -11,14 +11,15 @@ use constant VERSION => 0;
 use constant HEADER_LEN => 5;
 
 sub new {
-	my $class = shift;
+	my $this = shift;
+	my $class = ref($this) || $this;
 	my $self = {
 		bytes_wanted => HEADER_LEN,
 		message_len => HEADER_LEN,
 		buffer => '',
 		state => HEADER_STATE,
 	};
-	return(bless($self, $class));
+	bless $self, $class;
 }
 
 sub consume {

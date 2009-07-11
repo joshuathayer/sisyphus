@@ -77,7 +77,10 @@ sub connect {
 	my $cv = AnyEvent->condvar;
 
 	$self->connectAsync(
-		sub { print STDERR "connected.\n"; $cv->send; }
+		sub {
+			# print STDERR "connected.\n";
+			$cv->send;
+		}
 	);
 
 	$cv->recv;

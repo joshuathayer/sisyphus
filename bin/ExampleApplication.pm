@@ -24,7 +24,8 @@ sub message {
 	# we return this filehandle- this will indicate to Sisyphus that we have
 	# something to send back to the client. in this example case, we'll just
 	# return a simple message
-	return ([$fh]);
+	
+	$self->{client_callback}->([$fh]);	
 }
 
 sub get_data {

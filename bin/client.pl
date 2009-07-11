@@ -27,5 +27,3 @@ $cv->recv;
 $ac->send("hello dolly");
 
 AnyEvent->condvar->recv;
-
-
