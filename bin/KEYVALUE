@@ -1,4 +1,0 @@
-CREATE TABLE Keyvalue (
-	TheKey BINARY(16) PRIMARY KEY,
-	TheValue LONGBLOB
-	) ENGINE InnoDB;
