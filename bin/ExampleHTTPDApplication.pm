@@ -1,6 +1,8 @@
 package ExampleHTTPDApplication;
 
 use strict;
+use base 'Sisyphus::Application';
+
 use Data::Dumper;
 
 # implements a trivial little application

@@ -14,49 +14,67 @@ sub new {
 	my $this = shift;
 	my $class = ref($this) || $this;
 	my $self = {
-		bytes_wanted => HEADER_LEN,
-		message_len => HEADER_LEN,
-		buffer => '',
-		state => HEADER_STATE,
 	};
 	bless $self, $class;
 }
 
-sub consume {
+# client side.
+# will get called at connect-time.
+sub on_connect {
+    my $self = shift;
+    my $cb = shift;
+
+    $self->{connected} = 1;
+
+    # once we're authenticated and ready to use, call this...
+    $self->{cb} = $cb;
+
+	# set up a reader, so the server can tell us things
+	$self->receive_message_length();
+
+	# ok we call our App's callback, if there is one
+    $self->{cb}->();
+}
+
+# server side.
+sub on_client_connect {
 	my $self = shift;
-	if ($self->{state} == HEADER_STATE) {
-		#print "have " . length($self->{buffer}) . ", need " . $self->{message_len} . "!\n";
-		if (length($self->{buffer}) == $self->{message_len}) {
+
+	$self->receive_message_length();
+}
+
+# ######### both ####
+sub receive_message_length {
+	my $self = shift;
+	my $handle = $self->{handle};
+
+	$handle->push_read(
+		chunk => HEADER_LEN,
+		sub {
+			my ($handle, $data) = @_;
 			# we have 5 bytes of triv-proto header
 			# 8 bits of version, 32 bits of packet length
-			my ($v, $len) = unpack("CV", $self->{buffer});
-			#print "want a message of len $len!\n";
-			$self->{bytes_wanted} = $len;
-			$self->{message_len} = $len;
-			$self->{buffer} = '';
-			$self->{state} = PAYLOAD_STATE;
-			return undef;
-		} else {
-			#print "HEADER UNDERRUN!! buffer length " . length($self->{buffer}) . ", but i need " . $self->{message_len} . "!\n";
-			$self->{bytes_wanted} = $self->{message_len} - length($self->{buffer});
-			#print "meaning i need $self->{bytes_wanted} more bytes!\n";
-			return undef;
+			my ($v, $len) = unpack("CV", $data);
+			$self->receive_message($len);
 		}
-	} elsif ($self->{state} == PAYLOAD_STATE) {
-		if (length($self->{buffer}) == $self->{message_len}) {
-			my $message = $self->{buffer};
-			$self->{buffer} = '';
-			$self->{state} = HEADER_STATE;
-			$self->{bytes_wanted} = HEADER_LEN;
-			$self->{message_len} = HEADER_LEN;
-			return ($message);
-		} else {
-			#print "buffer length " . length($self->{buffer}) . ", but i need " . $self->{message_len} . "!\n";
-			$self->{bytes_wanted} = $self->{message_len} - length($self->{buffer});
-			#print "meaning i need $self->{bytes_wanted} more bytes!\n";
-			return undef;
-		}
-	}
+	);
+}
+
+# message over the wire from peer.
+# this could be server or client
+sub receive_message {
+	my $self = shift;
+	my $len = shift;
+	my $handle = $self->{handle};
+	$handle->push_read(
+		chunk => $len,
+		sub {
+			my ($handle, $data) = @_;
+			# ok, $data is actual message data now
+			$self->{app_callback}->($data);
+			$self->receive_message_length();
+		},
+	);
 }
 
 sub frame {
@@ -66,7 +84,8 @@ sub frame {
 	my $len = length($scalar);
 	#print "frame length $len\n";
 
-	return pack("CV", VERSION, $len) . $scalar;
+	$self->{handle}->push_write( pack("CV", VERSION, $len) );
+	$self->{handle}->push_write( $scalar );
 }
 
 1;

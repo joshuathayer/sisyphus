@@ -52,15 +52,16 @@ sub new {
 		port => 0,
 		protocol => undef,
 		application => undef,
+		response_handler => undef,
 		on_error => \&onError,
-		generator => undef,
 		server_closed => \&serverClosed,
 	};
 	return(bless($self, $class));
 }
 
 sub onError {
-	die("there was an error. alas.");
+	my $err = shift;
+	die("there was an error. alas: $err");
 }
 
 sub serverClosed {
@@ -86,95 +87,39 @@ sub connect {
 	$cv->recv;
 }
 
-
-
 sub connectAsync {
 	my $self = shift;
 	my $cb = shift;
-
+	print "host port $self->{host} $self->{port}\n";
 	tcp_connect $self->{host}, $self->{port}, sub {
 		$self->{fh} = shift;
 		unless (defined ($self->{fh})) {
 			print STDERR "connect failed.\n";
 			$self->{on_error}->();
 		};
+		print STDERR "TCP connected\n";
+		$self->{protocol} = Sisyphus::Proto::Factory->instantiate($self->{protocolName}, $self->{protocolArgs});
 
-		$self->{handle} = AnyEvent::Handle -> new (
+		$self->{protocol}->{app_callback} = $self->{app_callback};
+
+		$self->{protocol}->{handle} = AnyEvent::Handle -> new (
 			fh => $self->{fh},
 			on_error => $self->{on_error},
 			on_eof => $self->{on_eof},
 		);
-		# we're set up with "TrivialProtocol" (as a string"),
-		# we want a real object. so we instantiate here
-		$self->{protocol} = $self->{protocol}->new();
-		#print Dumper $self->{protocol};
 
-		$self->init_reader();
-
-		$cb->($self->{fh});
+		# print Dumper $self->{protocol};
+		
+		# call protocol's "on_connect" function, which initiates 
+		# and starts the handler
+		$self->{protocol}->on_connect($cb);
 	};
 }	
 
-sub init_reader {
-	my $self = shift;
-
-	$read_watcher = AnyEvent->io(
-		fh => $self->{fh},
-		poll => 'r',
-		cb => sub {
-			my $in;
-			unless(defined($in)) { $in = ''; }
-			my $len = sysread $self->{fh}, $in, $self->{protocol}->{bytes_wanted}, length $in;
-			if  ($len == 0) {
-				$self->{server_closed}->();
-			} elsif ($len > 0) {
-				$self->{protocol}->{buffer} .= $in;
-				my $r = $self->{protocol}->consume();
-				if ($r) {
-				
-					$self->{response_handler}->($r);
-
-				}
-			} else {
-				die("error on socket");
-			}
-
-			#if (0) { undef $read_watcher; }
-		},
-	);
-
-}
-
-sub _send {
-	my $self = shift;
-
-	$self->{handle}->on_drain(undef);
-	$self->{handle}->push_write( $self->{writeBuffer} );
-	$self->{writeBuffer} = '';
-}
-
 sub send {
 	my $self = shift;
-	my $message = shift;
-
-
-	my $framed = $self->{protocol}->frame($message);
-	$self->{writeBuffer} .= $framed;
-
-	$self->{handle}->on_drain( $self->_send );
-}
-
-sub generator {
-	my $self = shift;
-	my $cb = shift;
-
-	if ($cb) {
-		$self->{generator} ||= AnyEvent->idle(
-			cb => $cb,
-		);
-	} else {
-		undef $self->{generator};
-	}
+	my $data = shift;
+	$self->{protocol}->frame($data);
 }
 
 =head1 AUTHOR

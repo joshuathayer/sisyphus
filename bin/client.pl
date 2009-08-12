@@ -6,24 +6,50 @@ use lib ("/home/joshua/projects/sisyphus/lib/");
 use AnyEvent::Strict;
 use Sisyphus::Connector;
 use Data::Dumper;
-use Sisyphus::Proto::Trivial;
+use Sisyphus::Proto::Factory;
+use JSON;
 
 my $message_id = 0;
 
 my $ac  = new Sisyphus::Connector;
-$ac->{host} = "192.168.1.88";
+$ac->{host} = "127.0.0.1";
 $ac->{port} = 8889;
-$ac->{protocol} = "Sisyphus::Proto::Trivial";
+$ac->{protocolName} = "Trivial";
 
-$ac->{response_handler} = sub {
+$ac->{app_callback} = sub {
 	my $message = shift;
-	print "i received a message:\n$message\n\n";
+	print "i received a message:\n";
+	print Dumper $message;
 };
 
 my $cv = AnyEvent->condvar;
 $ac->connectAsync(sub { print STDERR "connected.\n"; $cv->send; });
 $cv->recv;
 
-$ac->send("hello dolly");
+# set a record
+my $o = {
+	command => "set",
+	key => "bonham",
+	data => {
+		first => "John",
+		last => "Bonham",
+		band => "Zeppelin",
+		albums => [
+			"Houses of the Holy","IV"
+		],
+	},
+};
+			
+$ac->send(to_json($o));
+
+# get a record
+my $o = {
+	command => "get",
+	key => "bonham",
+};
+$ac->send(to_json($o));
+
+$ac->send($json);
+#$ac->send($json);
 
 AnyEvent->condvar->recv;

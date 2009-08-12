@@ -11,7 +11,7 @@ use ExampleApplication;
 my $listener = new Sisyphus::Listener;
 
 $listener->{port} = 8889;
-$listener->{ip} = "192.168.1.88";
+$listener->{ip} = "127.0.0.1";
 $listener->{protocol} = "Sisyphus::Proto::Trivial";
 $listener->{application} = ExampleApplication->new();
 $listener->{use_push_write} = 0;

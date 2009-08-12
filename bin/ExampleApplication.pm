@@ -1,6 +1,7 @@
 package ExampleApplication;
 
 use strict;
+use Data::Dumper;
 
 # implements a trivial little application
 
@@ -8,6 +9,11 @@ sub new {
 	my $class = shift;
 	my $self = { };
 	return(bless($self, $class));
+}
+
+sub new_connection {
+	my $self = shift;
+	my @rest = @_;
 }
 
 sub remote_closed {
@@ -19,7 +25,8 @@ sub remote_closed {
 sub message {
 	my ($self, $host, $port, $message, $fh) = @_;
 
-	print "received a message from host $host port $port:\n$message\n\n";
+	print "received a message from host $host port $port:\n";
+	print Dumper $message;
 
 	# we return this filehandle- this will indicate to Sisyphus that we have
 	# something to send back to the client. in this example case, we'll just
