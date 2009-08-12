@@ -46,6 +46,7 @@ sub new {
 	$self->{fh} = undef;
 
 	$self->{query_queue} = [];
+	$self->{query_id} = 0;
 
 	return(bless($self, $class));
 }
@@ -200,8 +201,8 @@ sub receive_response_body {
 						unless ($self->{packet}->{server_status} & SERVER_MORE_RESULTS_EXISTS) {
 							# that's that..
 							# print STDERR "GOT ALL ROWS\n";
-							$self->service_queryqueue();
 							$self->{cb}->(undef);
+							$self->service_queryqueue();
 						}
 					} else {
 						# print STDERR "GOT A ROW.\n";
@@ -238,20 +239,25 @@ sub create_client_auth {
     return ($packet_head,$packet_body);
 }
 
+sub getQID {
+	my $self = shift;
+	$self->{qid} += 1;
+	return $self->{qid};
+}
+
 sub query {
     my $self = shift;
     my $args = { @_ };
 
-	my $cqid = $args->{qid};
     my $q = $args->{q};
-    $self->{cb} = $args->{cb};
 
     my $packet_body = mysql_encode_com_query $q;
     my $packet_head = mysql_encode_header $packet_body;
 
 	# print "pushing client qid $cqid on the query queue\n";
     push(@{$self->{queryqueue}}, {
-		cquid => $cquid,
+		cb => $args->{cb},
+		cqid => $args->{cqid},
 		body => $packet_body,
 		head => $packet_head,
 	});
@@ -262,11 +268,13 @@ sub query {
 sub service_queryqueue {
 	my $self = shift;
 
-	# print "servicing query queue\n";
+	#print "servicing query queue\n";
 	my $item = pop(@{$self->{queryqueue}});
+
 	if ($item) {
 		$self->{in_q} = 1;
-		$self->{cquid} = $item->{cquid};
+		$self->{cqid} = $item->{cqid};
+    	$self->{cb} = $item->{cb};
 
 		# send actual query packets to mysql server
 	    $self->send_packet($item->{head}, $item->{body});

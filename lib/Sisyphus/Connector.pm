@@ -6,6 +6,7 @@ use AnyEvent::Socket;
 use AnyEvent::Handle;
 
 use Data::Dumper;
+use Sisyphus::Proto::Factory;
 
 =head1 NAME
 
@@ -72,12 +73,12 @@ sub serverClosed {
 	$read_watcher = undef;
 }
 
-sub connect {
+sub connectSync {
 	my $self = shift;
 
 	my $cv = AnyEvent->condvar;
 
-	$self->connectAsync(
+	$self->connect(
 		sub {
 			# print STDERR "connected.\n";
 			$cv->send;
@@ -87,7 +88,7 @@ sub connect {
 	$cv->recv;
 }
 
-sub connectAsync {
+sub connect {
 	my $self = shift;
 	my $cb = shift;
 	print "host port $self->{host} $self->{port}\n";

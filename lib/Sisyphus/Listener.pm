@@ -140,9 +140,11 @@ sub client_callback {
 	# filehandle!
 	foreach my $writable (@$w) {
 		my $m = $self->{application}->get_data($writable);
-		# print "did i get data? $m\n";
-		unless ($m) { next; }
-		$clients->{ $writable }->{proto}->frame($m);
+		while ($m) {
+			#print "did i get data? $m\n";
+			$clients->{ $writable }->{proto}->frame($m);
+			$m = $self->{application}->get_data($writable);
+		}
 	}
 }
 
