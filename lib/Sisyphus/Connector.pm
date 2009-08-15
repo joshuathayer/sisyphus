@@ -100,6 +100,7 @@ sub connect {
 		};
 		print STDERR "TCP connected\n";
 		$self->{protocol} = Sisyphus::Proto::Factory->instantiate($self->{protocolName}, $self->{protocolArgs});
+		unless (ref($self->{protocol})) { die "could not instantiate protocol $self->{protocolName}\n"; }
 
 		$self->{protocol}->{app_callback} = $self->{app_callback};
 
