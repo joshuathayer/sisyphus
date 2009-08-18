@@ -3,6 +3,7 @@ package Sisyphus::ConnectionPool;
 use strict;
 
 use Sisyphus::Connector;
+use Data::Dumper;
 
 
 =head1 NAME
@@ -136,7 +137,15 @@ sub release {
 	my ($self, $c) = @_;
 	$c->{state} = "connected";
 	push(@{$self->{freepool}}, $c);
+	
 	print "Released Connection $c->{index}\n";
+	print "calling release_cb, if it exists.\n";
+
+	my $rcb = $self->{release_cb};
+
+	if ($rcb){
+		$rcb->();
+	}
 }
 
 =head2 send
@@ -157,4 +166,18 @@ sub send {
 	die "No free Connections" unless scalar(@{$self->{freepool}});
 
 	$self->{freepool}->[0]->send($m);
+}
+
+=head2 claimable
+	
+Returns true if we have a free connection that's claim()able.
+
+=cut
+
+sub claimable {
+	my $self = shift;
+
+	return scalar(@{$self->{freepool}});
+
+
 }
