@@ -178,6 +178,4 @@ sub claimable {
 	my $self = shift;
 
 	return scalar(@{$self->{freepool}});
-
-
 }
