@@ -69,6 +69,8 @@ sub listen {
 		my ($fh, $host, $port) = @_;
 		$self->{livecon} += 1;
 
+		print "\n\nFH IN TCP_SERVER\n\n";
+
 		my $read_watcher;
 		$read_watcher = AnyEvent->io(
 			fh=>$fh,
@@ -76,28 +78,41 @@ sub listen {
 			cb => sub {
 				# data on a read fh
 				my $in;
-				unless (defined($in)) { $in = ''; }
+				#unless (defined($in)) { $in = ''; }
 
-				unless($clients->{$fh}) {
+				my $cid = "$host:$port";
+
+				unless($clients->{$cid}) {
 					# a new connection from a client.
-					$clients->{$fh}->{proto} = $self->{protocol}->new();
-					$clients->{$fh}->{proto}->{app_callback} = sub { $self->app_callback($fh, @_) };
-					$clients->{$fh}->{host} = $host;	
-					$clients->{$fh}->{port} = $port;	
+					$clients->{$cid}->{proto} = $self->{protocol}->new();
+					$clients->{$cid}->{proto}->{app_callback} = sub { $self->app_callback($cid, @_) };
+					$clients->{$cid}->{host} = $host;	
+					$clients->{$cid}->{port} = $port;	
 
 					# make the handle
-					$clients->{$fh}->{handle} = AnyEvent::Handle->new(
+					$clients->{$cid}->{handle} = AnyEvent::Handle->new(
 						fh => $fh,
-						on_error => sub { warn "error talking to client!"; },
-						on_eof => $self->{application}->remote_closed($host, $port, $fh),
+						on_error => sub {
+							my ($hdl, $fatal, $msg) = @_;
+							print "error talking to client $cid. probably remote closed.\n";
+							$self->{application}->remote_closed($host, $port);
+							delete $self->{clients}->{$cid};
+							undef $read_watcher;
+						},
+						on_eof => sub {
+							print "eof from $cid\n";
+							$self->{application}->remote_closed($host, $port);
+							delete $self->{clients}->{$cid};
+							undef $read_watcher;
+						},
 					);
-					$clients->{$fh}->{proto}->{handle} = $clients->{$fh}->{handle};
+					$clients->{$cid}->{proto}->{handle} = $clients->{$cid}->{handle};
 
 					# alert application to new connection
-					my $m = $self->{application}->new_connection($host, $port, $fh);
+					my $m = $self->{application}->new_connection($host, $port);
 
 					# start the protocol ball rolling.
-					$clients->{$fh}->{proto}->on_client_connect();	
+					$clients->{$cid}->{proto}->on_client_connect();	
 				}
 	
 				# reference the callback within the callback, so it
