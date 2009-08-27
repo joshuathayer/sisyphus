@@ -76,59 +76,68 @@ sub listen {
 
 	tcp_server $self->{ip}, $self->{port}, sub {
 		my ($fh, $host, $port) = @_;
+
 		$self->{livecon} += 1;
+		print "live! " . $self->{livecon} . "\n";
 
-		my $read_watcher;
-		$read_watcher = AnyEvent->io(
-			fh=>$fh,
-			poll=>'r',
-			cb => sub {
-				# data on a read fh
-				my $in;
-				#unless (defined($in)) { $in = ''; }
+		my $cid = "$host:$port";
+		#print "data on $cid ($fh)\n";
 
-				my $cid = "$host:$port";
+		unless($clients->{$cid}) {
+			# a new connection from a client.
+			$clients->{$cid}->{proto} = $self->{protocol}->new();
 
-				unless($clients->{$cid}) {
-					# a new connection from a client.
-					$clients->{$cid}->{proto} = $self->{protocol}->new();
-					$clients->{$cid}->{proto}->{app_callback} = sub { $self->app_callback($cid, @_) };
-					$clients->{$cid}->{host} = $host;	
-					$clients->{$cid}->{port} = $port;	
+			# how the proto gets messages to the app
+			$clients->{$cid}->{proto}->{app_callback} = sub { $self->app_callback($cid, @_) };
 
-					# make the handle
-					$clients->{$cid}->{handle} = AnyEvent::Handle->new(
-						fh => $fh,
-						on_error => sub {
-							my ($hdl, $fatal, $msg) = @_;
-							print "error talking to client $cid. probably remote closed.\n";
-							$self->{application}->remote_closed($host, $port);
-							delete $self->{clients}->{$cid};
-							undef $read_watcher;
-						},
-						on_eof => sub {
-							print "eof from $cid\n";
-							$self->{application}->remote_closed($host, $port);
-							delete $self->{clients}->{$cid};
-							undef $read_watcher;
-						},
-					);
-					$clients->{$cid}->{proto}->{handle} = $clients->{$cid}->{handle};
+			# how protocol-triggered socket closures get bubbled back to me
+			# protocol calls $self->{close_callback}->() 
+			$clients->{$cid}->{proto}->{close_callback} = sub {
+				#print "in close_callback $cid\n";
+				$self->{application}->remote_closed($host, $port);
+				$clients->{$cid}->{handle}->{fh}->close();
+				delete $clients->{$cid};
+				$self->{livecon} -= 1;
+				#print "live decremented: " . $self->{livecon} . "\n";
+			};
 
-					# alert application to new connection
-					my $m = $self->{application}->new_connection($host, $port);
+			$clients->{$cid}->{host} = $host;	
+			$clients->{$cid}->{port} = $port;	
 
-					# start the protocol ball rolling.
-					$clients->{$cid}->{proto}->on_client_connect();	
-				}
-	
-				# reference the callback within the callback, so it
-				# never gets GCd
-				if (0) {
-					undef $read_watcher;
-				}
-			},
-		);
+			# make the handle
+			$clients->{$cid}->{handle} = AnyEvent::Handle->new(
+				fh => $fh,
+				on_error => sub {
+					my ($hdl, $fatal, $msg) = @_;
+					print "error talking to client $cid. probably remote closed.\n";
+
+					# we notify our application and our protocol of the closed connection
+					$clients->{$cid}->{proto}->on_client_disconnect();	
+					$self->{application}->remote_closed($host, $port);
+
+					delete $self->{clients}->{$cid};
+					$self->{livecon} -= 1;
+				},
+				on_eof => sub {
+					print "eof from $cid\n";
+
+					# we notify our application and our protocol of the closed connection
+					$clients->{$cid}->{proto}->on_client_disconnect();	
+					$self->{application}->remote_closed($host, $port);
+
+					delete $self->{clients}->{$cid};
+					$self->{livecon} -= 1;
+				},
+			);
+
+			$clients->{$cid}->{proto}->{handle} = $clients->{$cid}->{handle};
+
+			# alert application to new connection
+			my $m = $self->{application}->new_connection($host, $port);
+
+			# start the protocol ball rolling.
+			$clients->{$cid}->{proto}->on_client_connect();	
+		} else { print "huh, data on a socket that should be handled by the handler.\n"; }
 	}, sub {
 		my ($fh, $thishost, $thisport) = @_;
 		#print STDERR "bound to $thishost, $thisport\n";
@@ -140,9 +149,6 @@ sub listen {
 # of data available for our Application
 sub app_callback {
 	my ($self, $fh, @dat) = @_;
-
-	#print "dat in app_callback:\n";
-	#print Dumper \@dat;
 
 	my $host = $self->{clients}->{$fh}->{host};
 	my $port= $self->{clients}->{$fh}->{port};

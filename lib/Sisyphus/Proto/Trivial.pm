@@ -43,6 +43,10 @@ sub on_client_connect {
 	$self->receive_message_length();
 }
 
+sub on_client_disconnect {
+	# do nothing (yet?)
+}
+
 # ######### both ####
 sub receive_message_length {
 	my $self = shift;

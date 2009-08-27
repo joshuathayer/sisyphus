@@ -7,16 +7,15 @@ use Date::Format;
 
 # this is basically a shim between the Sisyphus framework and
 # AnyEvent::HTTPD::HTTPConnection. This class inherits from
-# AE:H:HTTPConnection in order to avoid calling that class's 
+# AE:H:HTTPConnection and specifically avoids calling that class's 
 # constructor, which tries to take control by creating its own
 # Handle object (which, in the Sisyphus universe, is done in the
-# Listener.
+# Listener).
 
 sub new {
 	my $this  = shift;
 	my $class = ref($this) || $this;
 	my $self  = { @_ };
-	print "class $class\n";
 	bless $self, $class;
 
 	$self->{request_timeout} = 60
@@ -32,13 +31,22 @@ sub new {
 sub on_client_connect {
 	my $self = shift;
 
-	print "hello from on_client_connect\n";
-
 	$self->reg_cb(request => sub {
 		# stolen from A::HTTPD.pm's new():
 		my ($con, $meth, $url, $hdr, $cont) = @_;
 		$self->request($con, $meth, $url, $hdr, $cont);
 	});
+
+	# ok wow. when AE:H:HTTPConnection is done sending its response,
+	# it indirectly triggers a "disconnect" event (via do_disconnect).
+	# we need to let our Listener know of the closed connection, so it 
+	# can do its own cleanup
+	$self->reg_cb (disconnect => sub {
+		#print "in disconnect callback!\n";
+		$self->{close_callback}->();
+		##print "back from calling close_callback!\n";
+	});
+
 
 	# at this point, $self->{handle} has been set to a new AE::Handle object. 
 	# AE::HTTPD::HTTPConnection (from which this class descends) expects that
@@ -49,51 +57,31 @@ sub on_client_connect {
 	$self->push_header_line;
 }
 
-## just pull bytes off the wire and give them to the httpd instance
-#sub consume {
-#	my $self = shift;
-#	my $handle = $self->{handle};
-#	print "consume!\n";
-#	$handle->on_read(sub {
-#		#my ($handle, $in) = @_;
-#		my $handle = shift;
-#		print "in "  . $handle->{rbuf} ."\n";
-#		$self->{HTTPConnection}->handle_data(\$handle->{rbuf});
-#	});
-#}
+# called by framework on client error/disconnect
+# we call AE:HTTPD::HTTPConnection's cleanup/close handler
+sub on_client_disconnect {
+	my $self = shift;
+	#print "in on_client_disconnect!\n";
+
+	$self->do_disconnect;
+}
 
 sub request {
 	# called by A::H::HTTPConnection on request
 	# so, we have a full HTTP request, we wish to send it to our application
 	my ($self, $con, $meth, $url, $hdr, $cont)  = @_;
 
-	print "in HTTP::request\n";
-	#print Dumper $con;
-	#print Dumper $meth;
-	#print Dumper $url;
-	#print Dumper $hdr;
-
+	# this is how we get massages back to the application
 	$self->{app_callback}->($meth, $url, $hdr, $cont);
+	#print "back from calling app callback\n";
 }
 
 sub frame {
 	# much stolen from A::H::HTTPConnection
 	my ($self, $r) = @_;
-	print Dumper $r;
 	my ($code, $msg, $hdr, $content) = @$r;
-	
-	my $res = "HTTP/1.0 $code $msg\015\012";
-	$hdr->{'Expires'} = $hdr->{'Date'} = time2str time;
-	$hdr->{'Cache-Control'} = "max-age=0";
-	$hdr->{'Content-Length'} = length $content;
 
-	while (my ($h, $v) = each %$hdr) {
-		$res .= "$h: $v\015\012";
-	}
-	$res .= "\015\012";
-	$res .= $content;
-
-	$self->{handle}->push_write($res);
-
+	$self->response($code, $msg, $hdr, $content);
+	#print "back from calling response\n";
 }
 1;
