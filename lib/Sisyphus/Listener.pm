@@ -56,7 +56,16 @@ sub new {
 	return(bless($self, $class));
 }
 
-# this is more or less lifted directly from the fcgi module.
+=head2 function1
+
+listen()
+
+Creates an AnyEvent tcp_server, listening on the configured port,
+speaking the specified protocol, and dispatching the the provided
+Application.
+
+=cut
+
 sub listen {
 	my $self = shift;
 	my $clients = $self->{clients};
@@ -68,8 +77,6 @@ sub listen {
 	tcp_server $self->{ip}, $self->{port}, sub {
 		my ($fh, $host, $port) = @_;
 		$self->{livecon} += 1;
-
-		print "\n\nFH IN TCP_SERVER\n\n";
 
 		my $read_watcher;
 		$read_watcher = AnyEvent->io(

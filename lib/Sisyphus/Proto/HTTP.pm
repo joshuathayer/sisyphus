@@ -10,30 +10,36 @@ sub new {
 	my $class = ref($this) || $this;
 	my $self  = { @_ };
 
-	$self->{bytes_wanted} = 4096;
-
 	$self->{HTTPConnection} = new AnyEvent::HTTPD::HTTPConnection;
 
 	# A::H::HTTPConnection uses the Object::Event framework, which is rather neat
 	$self->{HTTPConnection}->reg_cb(request => sub {
 		# stolen from A::HTTPD.pm's new():
 		my ($con, $meth, $url, $hdr, $cont) = @_;
-
 		$self->request($con, $meth, $url, $hdr, $cont);
 	});
 
 	bless $self, $class;
 }
 
+# called by framework when a client connects.
+sub on_client_connect {
+	my $self = shift;
+	print "hello from on_client_connect\n";
+	$self->consume();
+}
+
+# just pull bytes off the wire and give them to the httpd instance
 sub consume {
 	my $self = shift;
-
-	$self->{HTTPConnection}->handle_data( \$self->{buffer} );
-
-	$self->{bytes_wanted} = 4096;
-
-	# note we could return a full message here...
-	return undef;
+	my $handle = $self->{handle};
+	print "consume!\n";
+	$handle->on_read(sub {
+		#my ($handle, $in) = @_;
+		my $handle = shift;
+		print "in "  . $handle->{rbuf} ."\n";
+		$self->{HTTPConnection}->handle_data(\$handle->{rbuf});
+	});
 }
 
 sub request {
@@ -67,7 +73,7 @@ sub frame {
 	$res .= "\015\012";
 	$res .= $content;
 
-	return $res;
-}
+	$self->{handle}->push_write($res);
 
+}
 1;

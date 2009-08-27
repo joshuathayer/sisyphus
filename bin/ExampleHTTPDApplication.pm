@@ -15,6 +15,11 @@ sub new {
 	return(bless($self, $class));
 }
 
+sub new_connection {
+	my $self = shift;
+	print  "new connection\n";
+}
+
 sub remote_closed {
 	my ($self, $host, $port, $fh) = @_;
 	delete $responses->{$fh};
@@ -46,8 +51,18 @@ sub message {
 sub get_data {
 	my ($self, $fh) = @_;
 
-	print Dumper $responses;
-	return($responses->{$fh});
+	unless ($responses->{$fh}) { return; }
+	my $v = $responses->{$fh};
+	$responses->{$fh} = undef;
+	return $v;
+
+	#print "get_data fh $fh\n";
+	#print Dumper $responses->{$fh};
+	#my $v = join("\r\n", @{$responses->{$fh}});
+	#$responses->{$fh} = undef;
+
+	#print "V is:\n$v";
+	#return($v);
 }
 
 1;
