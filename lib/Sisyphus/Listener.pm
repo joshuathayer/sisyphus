@@ -112,7 +112,8 @@ sub listen {
 					print "error talking to client $cid. probably remote closed.\n";
 
 					# we notify our application and our protocol of the closed connection
-					$clients->{$cid}->{proto}->on_client_disconnect();	
+					# hmm this line was erroring- proto already undefed somehow?
+					#$clients->{$cid}->{proto}->on_client_disconnect();	
 					$self->{application}->remote_closed($host, $port);
 
 					delete $self->{clients}->{$cid};

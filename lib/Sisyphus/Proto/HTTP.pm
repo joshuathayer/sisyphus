@@ -4,6 +4,8 @@ use base 'AnyEvent::HTTPD::HTTPConnection';
 
 use Data::Dumper;
 use Date::Format;
+use AnyEvent::HTTPD::Request;
+use URI;
 
 # this is basically a shim between the Sisyphus framework and
 # AnyEvent::HTTPD::HTTPConnection. This class inherits from
@@ -70,9 +72,19 @@ sub request {
 	# called by A::H::HTTPConnection on request
 	# so, we have a full HTTP request, we wish to send it to our application
 	my ($self, $con, $meth, $url, $hdr, $cont)  = @_;
+	my $req = 
+	AnyEvent::HTTPD::Request->new (
+		httpd   => $self,
+		method  => $meth,
+		url     => $url,
+		hdr     => $hdr,
+		parm    => (ref $cont ? $cont : {}),
+		content => (ref $cont ? undef : $cont),
+		#resp    => \&{$self->frame},
+	);
 
 	# this is how we get massages back to the application
-	$self->{app_callback}->($meth, $url, $hdr, $cont);
+	$self->{app_callback}->($req);
 	#print "back from calling app callback\n";
 }
 
