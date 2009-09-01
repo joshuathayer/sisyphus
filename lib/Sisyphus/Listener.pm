@@ -98,7 +98,7 @@ sub listen {
 				$clients->{$cid}->{handle}->{fh}->close();
 				delete $clients->{$cid};
 				$self->{livecon} -= 1;
-				#print "live decremented: " . $self->{livecon} . "\n";
+				print "live decremented: " . $self->{livecon} . "\n";
 			};
 
 			$clients->{$cid}->{host} = $host;	
@@ -117,7 +117,8 @@ sub listen {
 					$self->{application}->remote_closed($host, $port);
 
 					delete $self->{clients}->{$cid};
-					$self->{livecon} -= 1;
+					#$self->{livecon} -= 1;
+					#print "live decremented: " . $self->{livecon} . "\n";
 				},
 				on_eof => sub {
 					print "eof from $cid\n";
