@@ -37,9 +37,11 @@ sub new {
 	$self->{httplog} = new Sislog;
 	$self->{httplog}->{fn} = "/tmp/pcrehttp_log";
 	$self->{httplog}->open();
-	$self->{applog}->{fn} = "/tmp/pcrehttp_app_log";
 	$self->{applog} = new Sislog;
+	$self->{applog}->{fn} = "/tmp/pcrehttp_app_log";
 	$self->{applog}->open();
+
+	$self->{applog}->log("internal", "PCREHTTPD starting up");
 
 	bless($self, $class);
 
