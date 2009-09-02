@@ -13,9 +13,6 @@ use AnyEvent::AIO;
 use Fcntl;
 use Sislog;
 
-use constant INTERNAL_LOG => 1;
-use constant APP_LOG => 2;
-
 use Time::HiRes;
 
 my $responses;
@@ -25,6 +22,9 @@ sub new {
 	my $class = shift;
 	my $mod = shift;
 	my $re = shift;
+	my $httplog = shift;
+	my $applog = shift;
+
 
 	my $self = { };
 
@@ -35,10 +35,10 @@ sub new {
     require $mod. ".pm";
 
 	$self->{httplog} = new Sislog;
-	$self->{httplog}->{fn} = "/tmp/pcrehttp_log";
+	$self->{httplog}->{fn} = $httplog;
 	$self->{httplog}->open();
 	$self->{applog} = new Sislog;
-	$self->{applog}->{fn} = "/tmp/pcrehttp_app_log";
+	$self->{applog}->{fn} = $applog;
 	$self->{applog}->open();
 
 	$self->{applog}->log("internal", "PCREHTTPD starting up");

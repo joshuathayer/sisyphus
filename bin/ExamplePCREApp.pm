@@ -1,9 +1,6 @@
 package ExamplePCREApp;
 
 # this is an example PCREHTTPD app
-
-print "ExamplePCREApp LOADED!!\n";
-
 sub index {
 	my ($meth, $u, $params, $cont, $cb, $logcb) = @_;
 
