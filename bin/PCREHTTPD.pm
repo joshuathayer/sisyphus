@@ -50,7 +50,6 @@ sub new {
 
 sub new_connection {
 	my $self = shift;
-	print  "new connection\n";
 }
 
 sub remote_closed {

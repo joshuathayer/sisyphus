@@ -8,6 +8,8 @@ use IO::AIO;
 use AnyEvent::AIO;
 use Fcntl;
 
+my @wbuf;
+
 sub new {
 	my $class = shift;
 
@@ -45,25 +47,26 @@ sub log {
     $mon += 1; $year += 1900;
     my $time = "$year/$mon/$mday $hour:$min:$sec.$usec";
 
-	$self->{wbuf} .= "$id $time $dat\n";
+	my $line = "$id $time $dat\n";
+	push @wbuf, $line;
 
-	unless($self->{in_write}) { $self->service(); } else { print "already in write\n"; }
+	unless($self->{in_write}) { $self->service(); }
 }
 
 sub service {
 	my $self = shift;
 
-	if (length($self->{wbuf})) {
+	if (scalar(@wbuf)) {
 		$self->{in_write} = 1;
-		aio_write $self->{fh}, undef, undef, $self->{wbuf}, undef, sub {
+		my $line = shift @wbuf;
+		aio_write $self->{fh}, undef, length($line), $line, undef, sub {
 			my $len = $_[0];
 			if ($len > 0) {
-				$self->{wbuf}= substr $self->{wbuf}, $len;
 				$self->service();
 			} else {
 				# jeez. an error writing out log. clear the buffer so we don't
 				# just fill memory forever, maybe print something?
-				$self->{wbuf} = '';
+				@wbuf = [];
 				print STDERR "logging error! aio_write returned error $!\n";
 			}
 		}

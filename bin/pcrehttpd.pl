@@ -1,18 +1,18 @@
 #!/usr/bin/perl
 
 use strict;
-use lib ('/home/joshua/sisyphus/lib');
-use lib ('/home/joshua/sisyphus/req/EV-3.8');
-use lib ('/home/joshua/sisyphus/req/AnyEvent-5.112/lib');
-use lib ('/home/joshua/sisyphus/req/MySQL-Packet-0.2007054/lib');
-use lib ('/home/joshua/sisyphus/req/AnyEvent-HTTP-1.43');
-use lib ('/home/joshua/sisyphus/req/AnyEvent-HTTPD-0.82/lib');
-use lib ('/home/joshua/sisyphus/req/common-sense-1.0/blib/lib');
-use lib ('/home/joshua/sisyphus/req/Object-Event-1.1/lib');
-use lib ('/home/joshua/sisyphus/req/IO-AIO-3.3/blib/arch');
-use lib ('/home/joshua/sisyphus/req/IO-AIO-3.3/blib/lib');
-use lib ('/home/joshua/sisyphus/req/AnyEvent-AIO-1.1/blib/lib/');
-use lib ('/home/joshua/sisyphus/req/URI-1.40/blib/lib');
+use lib ('/home/joshua/projects/sisyphus/lib');
+#use lib ('/home/joshua/projects/sisyphus/req/EV-3.8');
+#use lib ('/home/joshua/projects/sisyphus/req/AnyEvent-5.112/lib');
+#use lib ('/home/joshua/projects/sisyphus/req/MySQL-Packet-0.2007054/lib');
+#use lib ('/home/joshua/projects/sisyphus/req/AnyEvent-HTTP-1.43');
+#use lib ('/home/joshua/projects/sisyphus/req/AnyEvent-HTTPD-0.82/lib');
+#use lib ('/home/joshua/projects/sisyphus/req/common-sense-1.0/blib/lib');
+#use lib ('/home/joshua/projects/sisyphus/req/Object-Event-1.1/lib');
+#use lib ('/home/joshua/projects/sisyphus/req/IO-AIO-3.3/blib/arch');
+#use lib ('/home/joshua/projects/sisyphus/req/IO-AIO-3.3/blib/lib');
+#use lib ('/home/joshua/projects/sisyphus/req/AnyEvent-AIO-1.1/blib/lib/');
+#use lib ('/home/joshua/projects/sisyphus/req/URI-1.40/blib/lib');
 
 use Sisyphus::Listener;
 use Sisyphus::Proto::HTTP;
