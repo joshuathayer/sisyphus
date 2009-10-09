@@ -154,7 +154,9 @@ sub listen {
 
 			# start the protocol ball rolling.
 			$self->{clients}->{$cid}->{proto}->on_client_connect();	
-		} else { print "huh, data on a socket that should be handled by the handler.\n"; }
+		} else {
+			# print "huh, data on a socket that should be handled by the handler.\n";
+		}
 	}, sub {
 		my ($fh, $thishost, $thisport) = @_;
 	};

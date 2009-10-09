@@ -13,16 +13,19 @@ use MySQL::Packet qw(:encode);          # encoding subs
 use MySQL::Packet qw(:crypt);          # encoding subs
 use MySQL::Packet qw(:COM :CLIENT :SERVER);     # constants
 use Data::Hexdumper qw(hexdump);
+use Sislog;
 
 use constant USE_HANDLE => 1;
 
 sub new {
-    my $class = shift;
+	my $class = shift;
   	my $in = shift;
 
 	my $self = { };
 
-	# print Dumper $in;
+	$self->{log} = Sislog->new({use_syslog=>1, facility=>"Proto::Mysql"});
+	$self->{log}->open();
+	$self->{log}->log("instantiating mysql object");
 
 	#unless ($self->{port}) { $self->{port} = 3306; }
 	#unless ($self->{host}) { $self->{host} = "localhost"; }
@@ -36,7 +39,7 @@ sub new {
 	$self->{bytes_wanted} = 0;
 	$self->{buffer} = '';
 
-    # these drive the state machine
+	# these drive the state machine
 	$self->{packet} = undef;
 	$self->{greeting} = undef;
 	$self->{result} = undef;
@@ -47,6 +50,7 @@ sub new {
 
 	$self->{query_queue} = [];
 	$self->{query_id} = 0;
+
 
 	return(bless($self, $class));
 }
@@ -62,7 +66,7 @@ sub on_connect {
 	# once we're authenticated and ready to use, call this...
 	$self->{cb} = $cb;
 
-	#print STDERR "ON CONNECT!\n";
+	$self->{log}->log("on_connect");
 
 	$self->receive_response_header();
 }

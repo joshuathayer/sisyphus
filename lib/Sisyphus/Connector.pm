@@ -43,7 +43,6 @@ if you don't export anything, such as for a purely object-oriented module.
 
 =cut
 
-
 my $read_watcher;
 
 sub new {
@@ -56,7 +55,10 @@ sub new {
 		response_handler => undef,
 		on_error => \&onError,
 		server_closed => \&serverClosed,
+		log => Sislog->new({use_syslog=>1, facility=>"Sisyphus-Connector"}),
 	};
+	$self->{log}->open();
+	$self->{log}->log("Sisyphus::Connector instantiating");
 	return(bless($self, $class));
 }
 
@@ -68,7 +70,7 @@ sub onError {
 sub serverClosed {
 	my $self = shift;
 
-	print "the server closed the connection. alas.\n";
+	# print "the server closed the connection. alas.\n";
 
 	$read_watcher = undef;
 }
@@ -91,14 +93,14 @@ sub connectSync {
 sub connect {
 	my $self = shift;
 	my $cb = shift;
-	print "host port $self->{host} $self->{port}\n";
+	# print "host port $self->{host} $self->{port}\n";
 	tcp_connect $self->{host}, $self->{port}, sub {
 		$self->{fh} = shift;
 		unless (defined ($self->{fh})) {
-			print STDERR "connect failed.\n";
+			# print STDERR "connect failed.\n";
 			$self->{on_error}->();
 		};
-		print STDERR "TCP connected\n";
+
 		$self->{protocol} = Sisyphus::Proto::Factory->instantiate($self->{protocolName}, $self->{protocolArgs});
 		unless (ref($self->{protocol})) { die "could not instantiate protocol $self->{protocolName}\n"; }
 

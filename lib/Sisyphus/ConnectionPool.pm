@@ -60,7 +60,11 @@ sub new {
 		response_handler => undef,
 		on_error => \&onError,
 		server_closed => \&serverClosed,
+
+		log => Sislog->new({use_syslog=>1, facility=>"Sisyphus-ConnectionPool"}),
 	};
+	$self->{log}->open();
+	$self->{log}->log("Sisyphus::ConnectionPool instantiation");
 	return(bless($self, $class));
 }
 
@@ -75,25 +79,23 @@ sub connect {
 	my $self = shift;
 	my $cb = shift;
 
+	$self->{log}->log("in connect");
 	foreach my $i (0 .. ($self->{connections_to_make} - 1)) {
+		$self->{log}->log("creating connection $i");
 		$self->{connections}->{$i}->{connection} = Sisyphus::Connector->new();
 		$self->{connections}->{$i}->{connection}->{host} = $self->{host};
 		$self->{connections}->{$i}->{connection}->{port} = $self->{port};
 		$self->{connections}->{$i}->{connection}->{protocolName} = $self->{protocolName};
 		$self->{connections}->{$i}->{connection}->{protocolArgs} = $self->{protocolArgs};
-		#$self->{connections}->{$i}->{connection}->{application} = $self->{application};
-		#$self->{connections}->{$i}->{connection}->{response_handler} = $self->{response_handler};
 		$self->{connections}->{$i}->{connection}->{on_error} = $self->{on_error};
 		$self->{connections}->{$i}->{connection}->{server_closed} = $self->{server_closed};
 
 		$self->{connections}->{$i}->{state} = "disconnected";
 		$self->{connections}->{$i}->{index} = $i;
 		$self->{connections}->{$i}->{connection}->connect(sub { 
-			print "connection $i made!\n";
 			$self->{connections}->{$i}->{state} = "connected";
 			push(@{$self->{freepool}}, $self->{connections}->{$i});
 			if (scalar(@{$self->{freepool}}) == $self->{connections_to_make}) {
-				print STDERR "all connections made!\n";
 				$cb->();
 			}
 		});
@@ -120,7 +122,7 @@ sub claim {
 
 	$c->{state} = "claimed";
 
-	print "Claimed Connection $c->{index}\n";
+	# print "Claimed Connection $c->{index}\n";
 
 	return $c;
 }
@@ -138,8 +140,8 @@ sub release {
 	$c->{state} = "connected";
 	push(@{$self->{freepool}}, $c);
 	
-	print "Released Connection $c->{index}\n";
-	print "calling release_cb, if it exists.\n";
+	# print "Released Connection $c->{index}\n";
+	# print "calling release_cb, if it exists.\n";
 
 	my $rcb = $self->{release_cb};
 
