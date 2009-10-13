@@ -20,11 +20,12 @@ my $responses;
 
 sub new {
 	my $class = shift;
+
 	my $mod = shift;
 	my $re = shift;
 	my $httplog = shift;
 	my $applog = shift;
-
+	my $appargs = shift;	# a ref to pass to the app at instantiation
 
 	my $self = { };
 
@@ -42,6 +43,8 @@ sub new {
 	$self->{applog}->open();
 
 	$self->{applog}->log("internal", "PCREHTTPD starting up");
+
+	$self->{appinstance} = $mod->new($appargs);
 
 	bless($self, $class);
 
@@ -79,20 +82,23 @@ sub message {
 	}
 	unless ($f) {
 			my $cont = "404 notfound bro";
-			$self->{httplog}->log($fh, "$host $meth " . $url->as_string() . " -> ?? 404 " . length($cont));
+			$self->{httplog}->log($fh, "$host $meth " .
+			    $url->as_string() . " -> ?? 404 " . length($cont));
 			$responses->{$fh} =
 				[404, "NOT_FOUND", {"Content-type" => "text/html",}, $cont];
 			$self->{client_callback}->([$fh]);	
 	} else {
 
 		my $m = $self->{mod} . "::" . $f;
+		print "f is $f\n";
 
 		if (defined &{$m}) {
 			my ($code, $str, $headers, $cont);
-			# haha. getting around strict refs. see http://perldoc.perl.org/strict.html
-			my $bar = \&{$m};
 			eval {
-				$bar->($meth, $url, $params, $headers, sub {
+				# indirectly call the proper method on the pcre app's class
+				# see http://docstore.mik.ua/orelly/perl/cookbook/ch13_08.htm
+				# and http://perldoc.perl.org/strict.html
+				$self->{appinstance}->$f($meth, $url, $params, $headers, sub {
 
 					# callback from our app to the user
 					($code, $str, $headers, $cont) = @_;	
@@ -113,16 +119,19 @@ sub message {
 				$cont = "Alas. It seems as though we found a server error.";
 				$responses->{$fh} =
 					[500, "ERROR", {"Content-type" => "text/html",}, $cont];
-				$self->{httplog}->log($fh, "$host $meth " . $url->as_string() . " -> $m 500 " . length($cont));
+				$self->{httplog}->log($fh, "$host $meth " .
+				    $url->as_string() . " -> $m 500 " . length($cont));
 				$self->{client_callback}->([$fh]);	
 			} else {
 				# woo. a message from our application	
-				$self->{httplog}->log($fh, "$host $meth " . $url->as_string() . " -> $m $code " . length($cont));
+				$self->{httplog}->log($fh, "$host $meth " .
+				     $url->as_string() . " -> $m $code " . length($cont));
 			}
 
 		} else {
 			my $cont = "404 notfound bro";
-			$self->{httplog}->log($fh, "$host $meth " . $url->as_string() . " -> ??? 404 " . length($cont));
+			$self->{httplog}->log($fh, "$host $meth " .
+			    $url->as_string() . " -> ??? 404 " . length($cont));
 			$responses->{$fh} =
 				[404, "NOT_FOUND", {"Content-type" => "text/html",}, $cont];
 			$self->{client_callback}->([$fh]);	
