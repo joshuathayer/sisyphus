@@ -1,1 +1,11 @@
-File::Lockfile
+AnyEvent::AIO
+AnyEvent::HTTP
+AnyEvent::HTTPD
+common::sense
+Data::Hexdumper
+Digest::MD5
+IO::AIO
+JSON
+MySQL::Packet
+Object::Event
+URI
