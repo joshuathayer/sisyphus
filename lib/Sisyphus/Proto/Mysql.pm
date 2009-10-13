@@ -105,9 +105,8 @@ sub receive_response_body {
 	my $self = shift;
 
 	my $size = $self->{packet}->{packet_size};
-	# print STDERR "in receive body. size $size\n";
 
-	# four byte header, which include the length of the body	
+	# four byte header, which includes the length of the body	
 	$self->{handle}->push_read (
 		chunk => $size,
 		sub {
@@ -127,7 +126,7 @@ sub receive_response_body {
 				my ($h, $p) = $self->create_client_auth();
 				$self->send_packet($h, $p);
 			} elsif (not $self->{result}) {
-				#print STDERR "RESULT.\n";
+				#$self->{log}->log("RESULT RESULT");
 				my $rc = mysql_decode_result($self->{packet}, $data);
 
 				if ($rc < 0) {
@@ -146,27 +145,23 @@ sub receive_response_body {
 					$self->{on_error}->("bad result"); return;
 				} else {
 					if ($self->{packet}->{field_count}) {
-						#print STDERR "looks like i got a field count.\n";
 						$self->{result} = $self->{packet};
-						# fields and rows to come
 						$self->receive_response_header();
 					} elsif (not $self->{packet}->{server_status} & SERVER_MORE_RESULTS_EXISTS) {
 						# that's that..
-						#print STDERR "i want to be done, i think\n";
+						#$self->{log}->log("NO_MORE_RESULTS");
 						$self->{cb}->(undef); # jt i think?
 						$self->service_queryqueue();
 					} else {
-						#print STDERR "i don't know what i'm doing here...\n";
+						$self->{log}->log("this should be unreachable- error in mysql protocol state");
 						$self->service_queryqueue();
 					}
 				}
 			} elsif (not $self->{field_end}) {
-				# print "ok in NO_FIELD_END\n";
 				my $rc = do {
 					(mysql_test_var $self->{packet}, $data) ? (mysql_decode_field $self->{packet}, $data)
 											  : (mysql_decode_result $self->{packet}, $data)
 				};
-				#print "rc is $rc\n";
 				if ($rc < 0) {
 					$self->{on_error}->("bad field packet"); return;
 					$self->service_queryqueue();
@@ -205,13 +200,15 @@ sub receive_response_body {
 						unless ($self->{packet}->{server_status} & SERVER_MORE_RESULTS_EXISTS) {
 							# that's that..
 							# print STDERR "GOT ALL ROWS\n";
-							$self->{cb}->(undef);
+							#$self->{log}->log("GOT_ALL_RESULTS");
+							$self->{cb}->("DONE");
 							$self->service_queryqueue();
 						}
 					} else {
 						# print STDERR "GOT A ROW.\n";
 						my @row = @{ $self->{packet}->{row} };
 						#print Dumper \@row;
+						#$self->{log}->log("GOT_A_ROW");
 						$self->{cb}->(\@row);
 						$self->receive_response_header();
 					}
@@ -276,7 +273,6 @@ sub query {
     my $packet_body = mysql_encode_com_query $q;
     my $packet_head = mysql_encode_header $packet_body;
 
-	# print "pushing client qid $cqid on the query queue\n";
     push(@{$self->{queryqueue}}, {
 		cb => $args->{cb},
 		cqid => $args->{cqid},
