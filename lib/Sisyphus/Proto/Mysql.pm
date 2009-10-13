@@ -249,6 +249,24 @@ sub getQID {
 	return $self->{qid};
 }
 
+# note! this is a class method, not an instance method
+sub esc {
+	my $q = shift;
+
+	# jt 20091012 try escaping terms like this
+	$q =~ s/\\/\\\\/sg;
+	$q =~ s/\000/\\0/sg;
+	$q =~ s/\'/\\'/sg;
+	$q =~ s/\"/\\"/sg;
+	$q =~ s/\010/\\b/sg;
+	$q =~ s/\n/\\n/sg;
+	$q =~ s/\r/\\r/sg;
+	$q =~ s/\t/\\t/sg;
+	$q =~ s/\Z/\\Z/sg;
+	
+	return $q;
+}
+
 sub query {
     my $self = shift;
     my $args = { @_ };
