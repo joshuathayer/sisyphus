@@ -4,7 +4,7 @@ use strict;
 
 use Sisyphus::Connector;
 use Data::Dumper;
-
+use Sislog;
 
 =head1 NAME
 
@@ -48,7 +48,9 @@ sub new {
 	my $self = {
 		# data needed for pool maintenance
 		connections_to_make => 1,
-		freepool => [],
+		freepool => {},
+		connectingPool => {},
+		disconnectedPool => {},
 
 		# data needed for creation of connection instances
 		host => '',
@@ -79,27 +81,84 @@ sub connect {
 	my $self = shift;
 	my $cb = shift;
 
-	$self->{log}->log("in connect");
+	# create connection instances
 	foreach my $i (0 .. ($self->{connections_to_make} - 1)) {
-		$self->{log}->log("creating connection $i");
-		$self->{connections}->{$i}->{connection} = Sisyphus::Connector->new();
-		$self->{connections}->{$i}->{connection}->{host} = $self->{host};
-		$self->{connections}->{$i}->{connection}->{port} = $self->{port};
-		$self->{connections}->{$i}->{connection}->{protocolName} = $self->{protocolName};
-		$self->{connections}->{$i}->{connection}->{protocolArgs} = $self->{protocolArgs};
-		$self->{connections}->{$i}->{connection}->{on_error} = $self->{on_error};
-		$self->{connections}->{$i}->{connection}->{server_closed} = $self->{server_closed};
+		$self->{log}->log("creating connection $i to $self->{host}:$self->{port}");
+		my $c = $self->createConnection($i);
+		$self->{log}->log("created connection >>".$c->{id}."<<");
+		$self->{disconnectedPool}->{ $c->{id} } = $c;
+	}
 
-		$self->{connections}->{$i}->{state} = "disconnected";
-		$self->{connections}->{$i}->{index} = $i;
-		$self->{connections}->{$i}->{connection}->connect(sub { 
-			$self->{connections}->{$i}->{state} = "connected";
-			push(@{$self->{freepool}}, $self->{connections}->{$i});
-			if (scalar(@{$self->{freepool}}) == $self->{connections_to_make}) {
+	# attempt to make connections
+	$self->connectAll(sub {
+		$cb->();
+	});
+}
+
+sub connectAll {
+	my $self = shift;
+	my $cb = shift;
+
+	my $count = scalar(keys(%{$self->{disconnectedPool}}));
+	my $connectionsReturned = 0;
+
+	unless ($count) {
+		$self->{log}->log("no connections in notConnectedPool to connect to");
+		$cb->();
+	}
+
+	foreach my $i (keys(%{$self->{disconnectedPool}})) {
+		my $c = $self->{disconnectedPool}->{$i};
+
+		$self->{connectingPool}->{ $c->{id} } = $c;
+		delete $self->{disconnectedPool}->{ $c->{id} };
+
+		$self->connectOne($c, sub { 
+			my $c = shift; # this is the connection object
+
+			$connectionsReturned++;
+
+			if ($connectionsReturned == $count) {
+				$self->{log}->log("i think i'm done with attempting connections.");
 				$cb->();
 			}
 		});
 	}
+}
+
+sub createConnection {
+	my ($self, $id) = @_;
+
+	my $c = Sisyphus::Connector->new();
+	$c->{host} = $self->{host};
+	$c->{port} = $self->{port};
+	$c->{protocolName} = $self->{protocolName};
+	$c->{protocolArgs} = $self->{protocolArgs};
+	$c->{on_error} = $self->{on_error};
+	$c->{server_closed} = $self->{server_closed};
+	$c->{id} = $id;
+	
+
+	return $c;
+}
+
+sub connectOne {
+	my ($self, $c, $cb) = @_;
+	$c->connect( sub {
+		my $c = shift;
+
+		if ($c->{connected}) {
+			$self->{log}->log("connection state connecting->connected");
+			delete $self->{connectingPool}->{ $c->{id} };
+			$self->{freepool}->{ $c->{id} } = $c;
+		} else {
+			$self->{log}->log("connection state connecting->disconnected");
+			delete $self->{connectingPool}->{ $c->{id} };
+			$self->{disconnectedpool}->{ $c->{id} } = $c;
+		}
+
+		$cb->($c);
+	});
 }
 
 =head2 claim
@@ -114,17 +173,28 @@ Will die when no free connections are left.
 
 sub claim {
 	my $self = shift;
-	unless (scalar(@{$self->{freepool}})) {
-		die "No free Connections";
+	my $cb = shift;
+
+	unless (scalar(keys(%{$self->{freepool}}))) {
+		$self->{log}->log("no free connections!");
+		$cb->(undef);
 	}
 
-	my $c = pop(@{$self->{freepool}});
+	$self->{log}->log(scalar(keys(%{$self->{freepool}})) . " connections available");
+
+	my @c = values(%{ $self->{freepool} });
+	my $c = $c[0];
+
+	delete $self->{freepool}->{ $c->{id} };
+	$self->{log}->log(scalar(keys(%{$self->{freepool}})) . " connections available");
 
 	$c->{state} = "claimed";
 
-	# print "Claimed Connection $c->{index}\n";
+	$self->{log}->log(ref($c));
+	$self->{log}->log(ref($c->{connection}));
+	$self->{log}->log(ref($c->{protocol}));
 
-	return $c;
+	$cb->($c);
 }
 
 =head2 release
@@ -138,11 +208,8 @@ No return value.
 sub release {
 	my ($self, $c) = @_;
 	$c->{state} = "connected";
-	push(@{$self->{freepool}}, $c);
+	$self->{freepool}->{ $c->{id} } = $c;
 	
-	# print "Released Connection $c->{index}\n";
-	# print "calling release_cb, if it exists.\n";
-
 	my $rcb = $self->{release_cb};
 
 	if ($rcb){
@@ -158,16 +225,18 @@ an interactive transaction, you probably want claim/release.
 NOTE do *not* send data using this method if a potential side-effect of
 you sending a message is a return message. It'll mess everything up.
 
-Will die when no free connections exist.
+Will log an error when no free connections exist.
 
 =cut
 
 sub send {
 	my $self = shift;
 	my $m = shift;
-	die "No free Connections" unless scalar(@{$self->{freepool}});
+	$self->{log}->log("No free Connections in send") unless scalar(keys(%{$self->{freepool}}));
 
-	$self->{freepool}->[0]->send($m);
+	my $cid = keys(%{$self->{freepool}})->[0];
+
+	$self->{freepool}->{ $cid }->send($m);
 }
 
 =head2 claimable
@@ -178,6 +247,6 @@ Returns true if we have a free connection that's claim()able.
 
 sub claimable {
 	my $self = shift;
-
-	return scalar(@{$self->{freepool}});
+	
+	return scalar(keys(%{$self->{freepool}}));
 }

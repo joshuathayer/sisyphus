@@ -7,6 +7,7 @@ use AnyEvent::Handle;
 
 use Data::Dumper;
 use Sisyphus::Proto::Factory;
+use Sislog;
 
 =head1 NAME
 
@@ -53,24 +54,33 @@ sub new {
 		protocol => undef,
 		application => undef,
 		response_handler => undef,
-		on_error => \&onError,
-		server_closed => \&serverClosed,
+		connected => undef,
 		log => Sislog->new({use_syslog=>1, facility=>"Sisyphus-Connector"}),
 	};
+
+	bless($self, $class);
 	$self->{log}->open();
-	$self->{log}->log("Sisyphus::Connector instantiating");
-	return(bless($self, $class));
+
+	$self->{on_error} => sub { my $err = shift; $self->onError($err); };
+	$self->{server_closed} => sub { $self->serverClosed(); };
+
+	return $self;
 }
 
 sub onError {
+	my $self = shift;
 	my $err = shift;
-	die("there was an error. alas: $err");
+
+	$self->{connected} = undef;
+	$self->{log}->log("error on connection with $self->{host}:$self->{port}. connection considered closed.");
 }
 
 sub serverClosed {
 	my $self = shift;
 
-	# print "the server closed the connection. alas.\n";
+	
+	$self->{log}->log("server closed connection with $self->{host}:$self->{port}.");
+	$self->{connected} = undef;
 
 	$read_watcher = undef;
 }
@@ -82,7 +92,6 @@ sub connectSync {
 
 	$self->connect(
 		sub {
-			# print STDERR "connected.\n";
 			$cv->send;
 		}
 	);
@@ -93,16 +102,22 @@ sub connectSync {
 sub connect {
 	my $self = shift;
 	my $cb = shift;
-	# print "host port $self->{host} $self->{port}\n";
+
+	$self->{log}->log("trying to connect to $self->{host}, $self->{port}");
+
 	tcp_connect $self->{host}, $self->{port}, sub {
 		$self->{fh} = shift;
 		unless (defined ($self->{fh})) {
-			# print STDERR "connect failed.\n";
+			$self->{log}->log("connect failed.");
 			$self->{on_error}->();
 		};
 
+		$self->{log}->log("i feel connected.");
+
 		$self->{protocol} = Sisyphus::Proto::Factory->instantiate($self->{protocolName}, $self->{protocolArgs});
-		unless (ref($self->{protocol})) { die "could not instantiate protocol $self->{protocolName}\n"; }
+		unless (ref($self->{protocol})) {
+			$self->{log}->log("could not instantiate protocol " . $self->{protocolName});
+		}
 
 		$self->{protocol}->{app_callback} = $self->{app_callback};
 
@@ -112,11 +127,15 @@ sub connect {
 			on_eof => $self->{on_eof},
 		);
 
-		# print Dumper $self->{protocol};
+		$self->{connected} = 1;
 		
 		# call protocol's "on_connect" function, which initiates 
 		# and starts the handler
-		$self->{protocol}->on_connect($cb);
+		$self->{protocol}->on_connect( sub {
+			$self->{log}->log("in Connector's on_connect callback, now... yay");
+
+			$cb->($self);
+		} );
 	};
 }	
 

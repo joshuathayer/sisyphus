@@ -25,7 +25,7 @@ sub new {
 
 	$self->{log} = Sislog->new({use_syslog=>1, facility=>"Proto::Mysql"});
 	$self->{log}->open();
-	$self->{log}->log("instantiating mysql object");
+	#$self->{log}->log("instantiating mysql object");
 
 	#unless ($self->{port}) { $self->{port} = 3306; }
 	#unless ($self->{host}) { $self->{host} = "localhost"; }
@@ -64,9 +64,15 @@ sub on_connect {
 	$self->{connected} = 1;
 
 	# once we're authenticated and ready to use, call this...
-	$self->{cb} = $cb;
+	$self->{cb} = sub {
+		my $r = shift;
 
-	$self->{log}->log("on_connect");
+		# it would be nice to be able to detect things like authentication failures here,
+		# to be able to alert our calling code via this callback...
+		$self->{log}->log("in on_connect callback- i am connected it seems");
+
+		$cb->();
+	};
 
 	$self->receive_response_header();
 }
@@ -150,7 +156,8 @@ sub receive_response_body {
 					} elsif (not $self->{packet}->{server_status} & SERVER_MORE_RESULTS_EXISTS) {
 						# that's that..
 						#$self->{log}->log("NO_MORE_RESULTS");
-						$self->{cb}->(undef); # jt i think?
+						#$self->{cb}->(undef); # jt i think?
+						$self->{cb}->(["DONE"]); # jt i think?
 						$self->service_queryqueue();
 					} else {
 						$self->{log}->log("this should be unreachable- error in mysql protocol state");
@@ -201,7 +208,7 @@ sub receive_response_body {
 							# that's that..
 							# print STDERR "GOT ALL ROWS\n";
 							#$self->{log}->log("GOT_ALL_RESULTS");
-							$self->{cb}->("DONE");
+							$self->{cb}->(["DONE"]);
 							$self->service_queryqueue();
 						}
 					} else {
@@ -265,15 +272,17 @@ sub esc {
 }
 
 sub query {
-    my $self = shift;
-    my $args = { @_ };
+	my $self = shift;
+	my $args = { @_ };
 
-    my $q = $args->{q};
+	my $q = $args->{q};
 
-    my $packet_body = mysql_encode_com_query $q;
-    my $packet_head = mysql_encode_header $packet_body;
+	my $packet_body = mysql_encode_com_query $q;
+	my $packet_head = mysql_encode_header $packet_body;
 
-    push(@{$self->{queryqueue}}, {
+	$self->{log}->log("in query.");
+	
+	push(@{$self->{queryqueue}}, {
 		cb => $args->{cb},
 		cqid => $args->{cqid},
 		body => $packet_body,
@@ -286,16 +295,16 @@ sub query {
 sub service_queryqueue {
 	my $self = shift;
 
-	#print "servicing query queue\n";
+	$self->{log}->log("servicing queryqueue");
 	my $item = pop(@{$self->{queryqueue}});
 
 	if ($item) {
 		$self->{in_q} = 1;
 		$self->{cqid} = $item->{cqid};
-    	$self->{cb} = $item->{cb};
+		$self->{cb} = $item->{cb};
 
 		# send actual query packets to mysql server
-	    $self->send_packet($item->{head}, $item->{body});
+		$self->send_packet($item->{head}, $item->{body});
 	} else {
 		$self->{in_q} = undef;
 	}
