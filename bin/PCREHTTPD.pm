@@ -33,7 +33,7 @@ sub new {
 	$self->{re} = $re;
 	# module that has runnable functions
 	$self->{mod} = $mod;
-    require $mod. ".pm";
+	require $mod. ".pm";
 
 	$self->{httplog} = new Sislog;
 	$self->{httplog}->{fn} = $httplog;
