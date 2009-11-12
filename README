@@ -2,6 +2,8 @@ Sisyphus
 
 Sisyphus is a framework for creating event-centric network applications.
 
+Track issues at http://circl.lighthouseapp.com/projects/41102-sisyphus
+
 At its core is the AnyEvent library. It tries to abstract away all socket
 handling code. The developer specifies a protocol (or uses an existing 
 protocol module), and couples that with an application module, which is
