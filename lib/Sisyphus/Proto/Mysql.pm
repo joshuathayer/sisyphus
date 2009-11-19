@@ -23,7 +23,7 @@ sub new {
 
 	my $self = { };
 
-	$self->{log} = Sislog->new({use_syslog=>1, facility=>"Proto::Mysql"});
+	$self->{log} = Sislog->new({use_syslog=>1, facility=>"Proto-Mysql"});
 	$self->{log}->open();
 	#$self->{log}->log("instantiating mysql object");
 
