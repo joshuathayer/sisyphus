@@ -1,7 +1,6 @@
 #!/usr/bin/perl
 
 use strict;
-use lib ('/home/joshua/projects/sisyphus/lib');
 
 use Sisyphus::Listener;
 use Sisyphus::Proto::Trivial;
