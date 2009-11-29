@@ -18,6 +18,7 @@ requires	'URI'		=> '1.40';
 requires	'Data::Hexdumper' => 0;
 
 auto_install;
+license		'perl';
 
 WriteAll;
 
