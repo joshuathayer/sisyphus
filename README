@@ -1,4 +1,4 @@
-Sisyphus
+SISYPHUS
 
 Sisyphus is a framework for creating event-centric network applications.
 
@@ -9,12 +9,8 @@ handling code. The developer specifies a protocol (or uses an existing
 protocol module), and couples that with an application module, which is
 passed discrete message bodies as created by the protocol handler.
 
-Sisyphus is very much in early development status, and isn't useful for 
-anything yet. Most READMEs and other documentation is boilerplate CPAN
-stuff. Don't take any of it seriously. Including everything after this
-line.
-
-####
+Sisyphus is very much in early development status, but is good enough for
+development and shows promise. 
 
 INSTALLATION
 
