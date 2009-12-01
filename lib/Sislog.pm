@@ -80,6 +80,8 @@ sub open {
 sub log {
 	my ($self, $id, $dat) = @_;
 
+	unless ($dat) { $dat = ''; }
+
 	unless ($self->{opened}) { $self->open() };
 
 	if ($self->{use_syslog}) {
@@ -87,8 +89,8 @@ sub log {
 		return;
 	}
 
-	my ($sec, $usec) = Time::HiRes::gettimeofday();
-	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($sec);
+	my ($tsec, $usec) = Time::HiRes::gettimeofday();
+	my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($tsec);
 	$mon += 1; $year += 1900;
 	my $time = "$year/$mon/$mday $hour:$min:$sec.$usec";
 

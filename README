@@ -14,12 +14,33 @@ development and shows promise.
 
 INSTALLATION
 
-To install this module, run the following commands:
+This module requires Module::Install for installation. If you don't have 
+it, you can install it with:
+
+        sudo cpan Module::Install
+
+To install Sisyphus, run the following commands:
 
 	perl Makefile.PL
 	make
 	make test
-	make install
+	sudo make install
+
+Module::Install can go to cpan to satisfy any unmet dependencies. If you'd
+rather do that by hand, a list of dependencies exists at the top of 
+Makefile.PL.
+
+A note on installing EV: on Ubuntu 9.04 and 9.10, at least, installation 
+fails if you answer:
+
+	Skip further questions and use defaults (y/n)? [y] 
+
+with the affirmative. Answer n, then accept all the defaults until
+
+	Enable inotify support (y/n)? [y] 
+
+where you should answer with an "n" (unless you have the proper libs installed). 
+The remaining default aswers are fine.
 
 SUPPORT AND DOCUMENTATION
 

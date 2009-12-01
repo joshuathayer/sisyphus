@@ -1,7 +1,6 @@
-package ExampleApplication;
+package TestApplication;
 
 use strict;
-use Data::Dumper;
 
 # implements a trivial little application
 

@@ -56,20 +56,25 @@ sub new {
 		response_handler => undef,
 		connected => undef,
 		log => Sislog->new({use_syslog=>1, facility=>"Sisyphus-Connector"}),
+
 	};
 
 	bless($self, $class);
-	$self->{log}->open();
 
-	$self->{on_error} => sub { my $err = shift; $self->onError($err); };
-	$self->{server_closed} => sub { $self->serverClosed(); };
+	$self->{log}->open();
+	$self->{on_error} = sub {
+		my ($err) = @_;
+		$self->onError($err);
+	};
+	$self->{server_closed} = sub {
+		$self->serverClosed();
+	};
 
 	return $self;
 }
 
 sub onError {
-	my $self = shift;
-	my $err = shift;
+	my ($self, $err) = @_;
 
 	$self->{connected} = undef;
 	$self->{log}->log("error on connection with $self->{host}:$self->{port}. connection considered closed.");
