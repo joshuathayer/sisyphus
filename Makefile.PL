@@ -16,6 +16,7 @@ requires	'IO::AIO'	=> '3.3';
 requires	'AnyEvent::AIO'	=> '1.1';
 requires	'URI'		=> '1.40';
 requires	'Data::Hexdumper' => 0;
+requires	'Log::Syslog::Fast' => 0;
 
 auto_install;
 license		'perl';
