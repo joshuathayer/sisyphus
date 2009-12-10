@@ -14,6 +14,8 @@ development and shows promise.
 
 INSTALLATION
 
+This installation requires a working compiler such as Debian/Ubuntu build-essential
+
 This module requires Module::Install for installation. If you don't have 
 it, you can install it with:
 
@@ -31,16 +33,16 @@ rather do that by hand, a list of dependencies exists at the top of
 Makefile.PL.
 
 A note on installing EV: on Ubuntu 9.04 and 9.10, at least, installation 
-fails if you answer:
+FAILS if you answer:
 
-	Skip further questions and use defaults (y/n)? [y] 
+	Skip further questions and use defaults (y/n)? [y] (ANSWER NO)
 
-with the affirmative. Answer n, then accept all the defaults until
+with the affirmative. Answer 'n' (NO), then accept all the defaults until
 
-	Enable inotify support (y/n)? [y] 
+	Enable inotify support (y/n)? [y] (ANSWER NO)
 
 where you should answer with an "n" (unless you have the proper libs installed). 
-The remaining default aswers are fine.
+The remaining default answers are fine.
 
 SUPPORT AND DOCUMENTATION
 
