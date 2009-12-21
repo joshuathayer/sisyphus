@@ -1,9 +1,9 @@
 use inc::Module::Install;
 
-name     'Sisyphus';
-author   'Joshua Thayer <joshuamilesthayer@gmail.com>';
-#perl_version 5.whatever;
-all_from 'lib/Sisyphus.pm';
+name         'Sisyphus';
+author       'Joshua Thayer <joshuamilesthayer@gmail.com>';
+perl_version '5.005';
+all_from     'lib/Sisyphus.pm';
 
 build_requires 'Test::More';
 requires	'EV'		=> '3.8';
