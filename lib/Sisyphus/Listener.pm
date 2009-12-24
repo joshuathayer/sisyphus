@@ -93,7 +93,7 @@ sub listen {
 			# how protocol-triggered socket closures get bubbled back to me
 			# protocol calls $self->{close_callback}->() 
 			$self->{clients}->{$cid}->{proto}->{close_callback} = sub {
-				#print "in close_callback $cid\n";
+				print "in close_callback $cid\n";
 				$self->{application}->remote_closed($host, $port);
 				$self->{clients}->{$cid}->{handle}->{fh}->close();
 				delete $self->{clients}->{$cid};
@@ -109,7 +109,7 @@ sub listen {
 				fh => $fh,
 				on_error => sub {
 					my ($hdl, $fatal, $msg) = @_;
-					# print "error talking to client $cid. probably remote closed.\n";
+					print "error talking to client $cid. probably remote closed.\n";
 					# we notify our application and our protocol of the closed connection
 					# hmm this line was erroring- proto already undefed somehow?
 					# for some reason, we often get here after
@@ -129,12 +129,13 @@ sub listen {
 							$self->{livecon} -= 1;
 							# print "on_error live decremented: " . $self->{livecon} . "\n";
 						} else { 
-							# print "feels like close_callback closed socket already\n";
+							 print "feels like close_callback closed socket already\n";
 						}
 					}
 				},
 				on_eof => sub {
 					# we notify our application and our protocol of the closed connection
+					print "on eof classback!\n";
 					$self->{clients}->{$cid}->{proto}->on_client_disconnect();	
 					$self->{application}->remote_closed($host, $port);
 
@@ -155,7 +156,7 @@ sub listen {
 			# start the protocol ball rolling.
 			$self->{clients}->{$cid}->{proto}->on_client_connect();	
 		} else {
-			# print "huh, data on a socket that should be handled by the handler.\n";
+			print "huh, data on a socket that should be handled by the handler.\n";
 		}
 	}, sub {
 		my ($fh, $thishost, $thisport) = @_;

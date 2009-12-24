@@ -25,10 +25,6 @@ sub new {
 
 	$self->{log} = Sislog->new({use_syslog=>1, facility=>"Proto-Mysql"});
 	$self->{log}->open();
-	#$self->{log}->log("instantiating mysql object");
-
-	#unless ($self->{port}) { $self->{port} = 3306; }
-	#unless ($self->{host}) { $self->{host} = "localhost"; }
 
 	$self->{user} = $in->{'user'};
 	$self->{pw} = $in->{'pw'};
@@ -117,30 +113,24 @@ sub receive_response_body {
 		chunk => $size,
 		sub {
 			my ($handle, $data) = @_;
-			#print hexdump($data);
+
 			unless ($self->{greeting}) {
-				#my ($handle, $data) = @_;
-				#print STDERR "GREETING.\n";
 				my $rc = mysql_decode_greeting $self->{packet}, $data;
 				if ($rc < 0) {
 					$self->{on_error}->("strange mysql error"); return;
 					$self->service_queryqueue();
 				 }
 				$self->{greeting} = $self->{packet};
-				#mysql_debug_packet($self->{greeting});
 				$self->{packet} = undef;
 				my ($h, $p) = $self->create_client_auth();
 				$self->send_packet($h, $p);
 			} elsif (not $self->{result}) {
-				#$self->{log}->log("RESULT RESULT");
 				my $rc = mysql_decode_result($self->{packet}, $data);
 
 				if ($rc < 0) {
 					$self->{on_error}->("bad result"); return;
 					$self->service_queryqueue();
 				}
-
-				# mysql_debug_packet $self->{packet};
 
 				if ($self->{packet}->{error}) {
 					$self->{on_error}->("" .
@@ -156,7 +146,6 @@ sub receive_response_body {
 					} elsif (not $self->{packet}->{server_status} & SERVER_MORE_RESULTS_EXISTS) {
 						# that's that..
 						#$self->{log}->log("NO_MORE_RESULTS");
-						#$self->{cb}->(undef); # jt i think?
 						$self->{cb}->(["DONE"]); # jt i think?
 						$self->service_queryqueue();
 					} else {
@@ -280,7 +269,7 @@ sub query {
 	my $packet_body = mysql_encode_com_query $q;
 	my $packet_head = mysql_encode_header $packet_body;
 
-	$self->{log}->log("in query.");
+	#$self->{log}->log("in query.");
 	
 	push(@{$self->{queryqueue}}, {
 		cb => $args->{cb},

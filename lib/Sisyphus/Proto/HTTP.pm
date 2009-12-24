@@ -6,6 +6,7 @@ use Data::Dumper;
 use Date::Format;
 use AnyEvent::HTTPD::Request;
 use URI;
+use Scalar::Util qw/weaken/;
 
 # this is basically a shim between the Sisyphus framework and
 # AnyEvent::HTTPD::HTTPConnection. This class inherits from
@@ -20,8 +21,7 @@ sub new {
 	my $self  = { @_ };
 	bless $self, $class;
 
-	$self->{request_timeout} = 60
-	unless defined $self->{request_timeout};
+	($self->{request_timeout} = 2) unless defined $self->{request_timeout};
 
 	return $self
 }
@@ -44,9 +44,14 @@ sub on_client_connect {
 	# we need to let our Listener know of the closed connection, so it 
 	# can do its own cleanup
 	$self->reg_cb (disconnect => sub {
-		#print "in disconnect callback!\n";
-		$self->{close_callback}->();
-		##print "back from calling close_callback!\n";
+		my ($self, $err) = @_;
+		print "in disconnect callback with error '$err'\n";
+		$self->{close_callback}->($err);
+	
+		# AH. this is the proper way to shut down a handle
+		# keywords: fh handle connection close
+		undef $self->{hdl};
+		undef $self->{handle};
 	});
 
 
@@ -55,7 +60,7 @@ sub on_client_connect {
 	# as $self->{hdl}. so...
 	$self->{hdl} = $self->{handle};
 
-	# now, we let AE::HTTPD::HTTPConnetion run the show
+	# now, we let AE::HTTPD::HTTPConnection run the show
 	$self->push_header_line;
 }
 
@@ -63,7 +68,6 @@ sub on_client_connect {
 # we call AE:HTTPD::HTTPConnection's cleanup/close handler
 sub on_client_disconnect {
 	my $self = shift;
-	#print "in on_client_disconnect!\n";
 
 	$self->do_disconnect;
 }
@@ -80,20 +84,18 @@ sub request {
 		hdr     => $hdr,
 		parm    => (ref $cont ? $cont : {}),
 		content => (ref $cont ? undef : $cont),
-		#resp    => \&{$self->frame},
 	);
+
+	# weaken $req;
 
 	# this is how we get massages back to the application
 	$self->{app_callback}->($req);
-	#print "back from calling app callback\n";
 }
 
 sub frame {
-	# much stolen from A::H::HTTPConnection
 	my ($self, $r) = @_;
 	my ($code, $msg, $hdr, $content) = @$r;
 
 	$self->response($code, $msg, $hdr, $content);
-	#print "back from calling response\n";
 }
 1;
