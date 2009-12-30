@@ -1,6 +1,8 @@
 package Sisyphus::Proto::Trivial;
 
 use strict;
+use Scalar::Util qw/ weaken /;
+#use Devel::Cycle;
 
 # a trivial protocol for integration with an AnyEvent-based server
 
@@ -21,19 +23,18 @@ sub new {
 # client side.
 # will get called at connect-time.
 sub on_connect {
-    my $self = shift;
-    my $cb = shift;
+	my ($self, $cb) = @_;
 
-    $self->{connected} = 1;
+	$self->{connected} = 1;
 
-    # once we're authenticated and ready to use, call this...
-    $self->{cb} = $cb;
+	# once we're authenticated and ready to use, call this...
+	$self->{cb} = $cb;
 
 	# set up a reader, so the server can tell us things
 	$self->receive_message_length();
 
 	# ok we call our App's callback, if there is one
-    $self->{cb}->();
+	$self->{cb}->();
 }
 
 # server side.
@@ -50,6 +51,9 @@ sub on_client_disconnect {
 # ######### both ####
 sub receive_message_length {
 	my $self = shift;
+
+	weaken $self;
+
 	my $handle = $self->{handle};
 
 	$handle->push_read(
@@ -68,6 +72,9 @@ sub receive_message_length {
 # this could be server or client
 sub receive_message {
 	my $self = shift;
+
+	weaken $self;
+
 	my $len = shift;
 	my $handle = $self->{handle};
 	$handle->push_read(
@@ -82,11 +89,11 @@ sub receive_message {
 }
 
 sub frame {
-	my $self = shift;
-	my $scalar = shift;
+	my ($self, $scalar) = @_;
+
+        # Devel::Cycle::find_cycle($self);
 	
 	my $len = length($scalar);
-	#print "frame length $len\n";
 
 	$self->{handle}->push_write( pack("CV", VERSION, $len) );
 	$self->{handle}->push_write( $scalar );

@@ -3,6 +3,8 @@ use strict;
 use AnyEvent::Socket;
 use AnyEvent::Handle;
 use Data::Dumper;
+use Scalar::Util qw/ weaken /;
+#use Devel::Cycle;
 
 =head1 NAME
 
@@ -68,7 +70,6 @@ Application.
 
 sub listen {
 	my $self = shift;
-	#my $clients = $self->{clients};
 
 	# set up application's client_callback. this is how the application lets
 	# us know of data ready for our clients
@@ -78,90 +79,94 @@ sub listen {
 		my ($fh, $host, $port) = @_;
 
 		$self->{livecon} += 1;
-		# print "live! " . $self->{livecon} . "\n";
 
 		my $cid = "$host:$port";
-		#print "data on $cid ($fh)\n";
+		if ($self->{clients}->{$cid}) {
+			print "huh, data on a socket that should be handled by the handler.\n";
+			return;
+		}
 
-		unless($self->{clients}->{$cid}) {
-			# a new connection from a client.
-			$self->{clients}->{$cid}->{proto} = $self->{protocol}->new();
+		# a new connection from a client.
+		$self->{clients}->{$cid}->{proto} = $self->{protocol}->new();
 
-			# how the proto gets messages to the app
-			$self->{clients}->{$cid}->{proto}->{app_callback} = sub { $self->app_callback($cid, @_) };
+		# how the proto gets messages to the app
+		$self->{clients}->{$cid}->{proto}->{app_callback} = sub { $self->app_callback($cid, @_) };
 
-			# how protocol-triggered socket closures get bubbled back to me
-			# protocol calls $self->{close_callback}->() 
-			$self->{clients}->{$cid}->{proto}->{close_callback} = sub {
-				print "in close_callback $cid\n";
-				$self->{application}->remote_closed($host, $port);
-				$self->{clients}->{$cid}->{handle}->{fh}->close();
-				delete $self->{clients}->{$cid};
-				$self->{livecon} -= 1;
-				#print "close_callback live decremented: " . $self->{livecon} . "\n";
-			};
+		# how protocol-triggered socket closures get bubbled back to me
+		# protocol calls $self->{close_callback}->() 
+		$self->{clients}->{$cid}->{proto}->{close_callback} = sub {
+			print "in close_callback $cid\n";
 
-			$self->{clients}->{$cid}->{host} = $host;	
-			$self->{clients}->{$cid}->{port} = $port;	
+			$self->{application}->remote_closed($host, $port, $fh);
+			$self->{clients}->{$cid}->{handle}->{fh}->close();
 
-			# make the handle
-			$self->{clients}->{$cid}->{handle} = AnyEvent::Handle->new(
-				fh => $fh,
-				on_error => sub {
-					my ($hdl, $fatal, $msg) = @_;
-					print "error talking to client $cid. probably remote closed.\n";
-					# we notify our application and our protocol of the closed connection
-					# hmm this line was erroring- proto already undefed somehow?
-					# for some reason, we often get here after
-					# protocol-triggered disconnect (after
-					# close_callback is called). in that case, we've
-					# already done all the shutdown work, so we can, i
-					# think, essentially ignore this
-					if ($self->{clients}->{$cid}) {
-						$self->{clients}->{$cid}->{proto}->on_client_disconnect();	
-						$self->{application}->remote_closed($host, $port);
+			delete $self->{clients}->{$cid};
 
-						# the proto disconnect handler can potentially 
-						# tickle close_callback, above, in which case
-						# we may have already closed the socket by here
-						if ($self->{clients}->{$cid}) {
-							delete $self->{clients}->{$cid};
-							$self->{livecon} -= 1;
-							# print "on_error live decremented: " . $self->{livecon} . "\n";
-						} else { 
-							 print "feels like close_callback closed socket already\n";
-						}
-					}
-				},
-				on_eof => sub {
-					# we notify our application and our protocol of the closed connection
-					print "on eof classback!\n";
+			$self->{livecon} -= 1;
+			#print "close_callback live decremented: " . $self->{livecon} . "\n";
+		};
+
+		$self->{clients}->{$cid}->{host} = $host;	
+		$self->{clients}->{$cid}->{port} = $port;	
+
+		# make the handle
+		$self->{clients}->{$cid}->{handle} = AnyEvent::Handle->new(
+			fh => $fh,
+			on_error => sub {
+				my ($hdl, $fatal, $msg) = @_;
+				print "error talking to client $cid. probably remote closed.\n";
+				# we notify our application and our protocol of the closed connection
+				# hmm this line was erroring- proto already undefed somehow?
+				# for some reason, we often get here after
+				# protocol-triggered disconnect (after
+				# close_callback is called). in that case, we've
+				# already done all the shutdown work, so we can, i
+				# think, essentially ignore this
+				if ($self->{clients}->{$cid}) {
 					$self->{clients}->{$cid}->{proto}->on_client_disconnect();	
-					$self->{application}->remote_closed($host, $port);
+					$self->{application}->remote_closed($host, $port, $fh);
 
-					# see comment above- on_client_disconnect may have
-					# already done this stuff:
+					# the proto disconnect handler can potentially 
+					# tickle close_callback, above, in which case
+					# we may have already closed the socket by here
 					if ($self->{clients}->{$cid}) {
 						delete $self->{clients}->{$cid};
 						$self->{livecon} -= 1;
+						# print "on_error live decremented: " . $self->{livecon} . "\n";
+					} else { 
+						 print "feels like close_callback closed socket already\n";
 					}
-				},
-			);
+				}
+			},
+			on_eof => sub {
+				# we notify our application and our protocol of the closed connection
+				print "on eof classback!\n";
+				$self->{clients}->{$cid}->{proto}->on_client_disconnect();	
+				$self->{application}->remote_closed($host, $port, $fh);
 
-			$self->{clients}->{$cid}->{proto}->{handle} = $self->{clients}->{$cid}->{handle};
+				# see comment above- on_client_disconnect may have
+				# already done this stuff:
+				if ($self->{clients}->{$cid}) {
+					delete $self->{clients}->{$cid};
+					$self->{livecon} -= 1;
+				}
+			},
+		);
 
-			# alert application to new connection
-			my $m = $self->{application}->new_connection($host, $port);
 
-			# start the protocol ball rolling.
-			$self->{clients}->{$cid}->{proto}->on_client_connect();	
-		} else {
-			print "huh, data on a socket that should be handled by the handler.\n";
-		}
+		$self->{clients}->{$cid}->{proto}->{handle} = $self->{clients}->{$cid}->{handle};
+
+		# alert application to new connection
+		$self->{application}->new_connection($host, $port);
+
+		# start the protocol ball rolling.
+		$self->{clients}->{$cid}->{proto}->on_client_connect();	
 	}, sub {
 		my ($fh, $thishost, $thisport) = @_;
 	};
-	
+
+	weaken $self;
+	#Devel::Cycle::find_cycle($self);
 }
 
 # can be called at any time by a Protocol instance. Asynchronous notification
@@ -172,7 +177,9 @@ sub app_callback {
 	my $host = $self->{clients}->{$fh}->{host};
 	my $port= $self->{clients}->{$fh}->{port};
 
-	my $w = $self->{application}->message($host, $port, \@dat, $fh);
+	#Devel::Cycle::find_cycle($self);
+
+	$self->{application}->message($host, $port, \@dat, $fh);
 }
 
 # called at any time by our Application instance. indicates app has data ready 
@@ -180,8 +187,6 @@ sub app_callback {
 sub client_callback {						
 	my $self = shift;
 	my $w = shift;
-
-	#my $clients = $self->{clients};
 
 	# if we're here, our app has indicated that it has something to send on this 
 	# filehandle!

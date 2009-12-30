@@ -5,6 +5,7 @@ use strict;
 use Sisyphus::Connector;
 use Data::Dumper;
 use Sislog;
+use Scalar::Util qw/ weaken /;
 
 =head1 NAME
 
@@ -78,8 +79,9 @@ called once all connections are made.
 =cut
 
 sub connect {
-	my $self = shift;
-	my $cb = shift;
+	my ($self, $cb) = @_;
+
+	weaken $self;
 
 	# create connection instances
 	foreach my $i (0 .. ($self->{connections_to_make} - 1)) {
@@ -96,8 +98,9 @@ sub connect {
 }
 
 sub connectAll {
-	my $self = shift;
-	my $cb = shift;
+	my ($self, $cb) = @_;
+
+	weaken $self;
 
 	my $count = scalar(keys(%{$self->{disconnectedPool}}));
 	my $connectionsReturned = 0;
@@ -129,6 +132,8 @@ sub connectAll {
 sub createConnection {
 	my ($self, $id) = @_;
 
+	weaken $self;
+
 	my $c = Sisyphus::Connector->new();
 	$c->{host} = $self->{host};
 	$c->{port} = $self->{port};
@@ -138,12 +143,14 @@ sub createConnection {
 	$c->{server_closed} = $self->{server_closed};
 	$c->{id} = $id;
 	
-
 	return $c;
 }
 
 sub connectOne {
 	my ($self, $c, $cb) = @_;
+
+	weaken $self;
+
 	$c->connect( sub {
 		my $c = shift;
 

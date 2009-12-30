@@ -10,7 +10,7 @@ use ExampleHTTPDApplication;
 my $listener = new Sisyphus::Listener;
 
 $listener->{port} = 8889;
-$listener->{ip} = "172.16.0.8";
+$listener->{ip} = "127.0.0.1";
 $listener->{protocol} = "Sisyphus::Proto::HTTP";
 $listener->{application} = ExampleHTTPDApplication->new();
 $listener->{use_push_write} = 0;

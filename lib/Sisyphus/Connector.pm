@@ -8,6 +8,7 @@ use AnyEvent::Handle;
 use Data::Dumper;
 use Sisyphus::Proto::Factory;
 use Sislog;
+use Scalar::Util qw/ weaken /;
 
 =head1 NAME
 
@@ -60,14 +61,16 @@ sub new {
 	};
 
 	bless($self, $class);
+	my $wself = $self;
+	weaken $wself;
 
 	$self->{log}->open();
 	$self->{on_error} = sub {
 		my ($err) = @_;
-		$self->onError($err);
+		$wself->onError($err);
 	};
 	$self->{server_closed} = sub {
-		$self->serverClosed();
+		$wself->serverClosed();
 	};
 
 	return $self;
@@ -105,8 +108,9 @@ sub connectSync {
 }
 
 sub connect {
-	my $self = shift;
-	my $cb = shift;
+	my ($self, $cb) = @_;
+
+	weaken $self;
 
 	$self->{log}->log("trying to connect to $self->{host}, $self->{port}");
 
@@ -115,6 +119,7 @@ sub connect {
 		unless (defined ($self->{fh})) {
 			$self->{log}->log("connect failed.");
 			$self->{on_error}->();
+			return;
 		};
 
 		$self->{log}->log("i feel connected.");
@@ -142,11 +147,12 @@ sub connect {
 			$cb->($self);
 		} );
 	};
+
 }	
 
 sub send {
-	my $self = shift;
-	my $data = shift;
+	my ($self, $data) = @_;
+
 	$self->{protocol}->frame($data);
 }
 

@@ -14,6 +14,9 @@ use MySQL::Packet qw(:crypt);          # encoding subs
 use MySQL::Packet qw(:COM :CLIENT :SERVER);     # constants
 use Data::Hexdumper qw(hexdump);
 use Sislog;
+use Scalar::Util qw/ weaken /;
+use Devel::Cycle;
+
 
 use constant USE_HANDLE => 1;
 
@@ -44,9 +47,8 @@ sub new {
 	$self->{handle} = undef;
 	$self->{fh} = undef;
 
-	$self->{query_queue} = [];
+	$self->{queryqueue} = [];
 	$self->{query_id} = 0;
-
 
 	return(bless($self, $class));
 }
@@ -54,8 +56,9 @@ sub new {
 # will get called at connect-time.
 # this must eventually call the callback passed to it
 sub on_connect {
-	my $self = shift;
-	my $cb = shift;
+	my ($self, $cb) = @_;
+
+	weaken $self;
 
 	$self->{connected} = 1;
 
@@ -76,12 +79,15 @@ sub on_connect {
 sub receive_response_header {
 	my $self = shift;
 
+	weaken $self;
+
 	my $handle = $self->{handle};
+        #Devel::Cycle::find_cycle($self);
 
    	my $rc;
    	$self->{packet} = undef;
 
-	# print STDERR "in receive response header\n";
+	$self->{log}->log("in receive_response_header");
 
    	# four byte header, which include the length of the body    
 	$handle->push_read(
@@ -97,6 +103,7 @@ sub receive_response_header {
 				$self->{packet} = $_packet;
 				my $size = $self->{packet}->{packet_size};
 				#print STDERR "looks like $size byte packet.\n";
+				$self->{log}->log("looks like a $size byte packet");
 				$self->receive_response_body();
 			}
 		}
@@ -105,6 +112,8 @@ sub receive_response_header {
 
 sub receive_response_body {
 	my $self = shift;
+
+	weaken $self;
 
 	my $size = $self->{packet}->{packet_size};
 
@@ -233,7 +242,7 @@ sub create_client_auth {
 
     my $packet_head = mysql_encode_header $packet_body, 1;
 
-    return ($packet_head,$packet_body);
+    return ($packet_head, $packet_body);
 }
 
 sub getQID {
@@ -265,18 +274,20 @@ sub query {
 	my $args = { @_ };
 
 	my $q = $args->{q};
+	my $cb = $args->{cb};
 
 	my $packet_body = mysql_encode_com_query $q;
 	my $packet_head = mysql_encode_header $packet_body;
 
-	#$self->{log}->log("in query.");
-	
+	$self->{log}->log("in query, in_q is $self->{in_q}");
+
 	push(@{$self->{queryqueue}}, {
 		cb => $args->{cb},
 		cqid => $args->{cqid},
 		body => $packet_body,
 		head => $packet_head,
 	});
+	#print Dumper $self->{queryqueue};
 
 	unless ($self->{in_q}) { $self->service_queryqueue(); }
 }
@@ -286,26 +297,30 @@ sub service_queryqueue {
 
 	$self->{log}->log("servicing queryqueue");
 	my $item = pop(@{$self->{queryqueue}});
+	my $cb = $item->{cb};
 
-	if ($item) {
+	if ($item->{head}) {
 		$self->{in_q} = 1;
 		$self->{cqid} = $item->{cqid};
-		$self->{cb} = $item->{cb};
+		$self->{cb} = $cb;
+
+		$self->{log}->log("popped item from query queue, sending to mysql");
 
 		# send actual query packets to mysql server
 		$self->send_packet($item->{head}, $item->{body});
 	} else {
 		$self->{in_q} = undef;
+		$self->{log}->log("query queue empty, in_q set to undef");
 	}
 }
 
 sub send_packet {
     my ($self, $h, $b) = @_;
 
-    #print "h:\n";
-    #print hexdump($h);
-    #print "b:\n";
-    #print hexdump($b);
+	#print "h:\n";
+	#print hexdump($h);
+	#print "b:\n";
+	#print hexdump($b);
 
     $self->{handle}->push_write($h);
     $self->{handle}->push_write($b);
