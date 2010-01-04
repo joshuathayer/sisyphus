@@ -81,6 +81,7 @@ sub listen {
 		$self->{livecon} += 1;
 
 		my $cid = "$host:$port";
+
 		if ($self->{clients}->{$cid}) {
 			print "huh, data on a socket that should be handled by the handler.\n";
 			return;
@@ -95,15 +96,12 @@ sub listen {
 		# how protocol-triggered socket closures get bubbled back to me
 		# protocol calls $self->{close_callback}->() 
 		$self->{clients}->{$cid}->{proto}->{close_callback} = sub {
-			print "in close_callback $cid\n";
-
-			$self->{application}->remote_closed($host, $port, $fh);
+			$self->{application}->remote_closed($host, $port, $cid);
 			$self->{clients}->{$cid}->{handle}->{fh}->close();
 
 			delete $self->{clients}->{$cid};
 
 			$self->{livecon} -= 1;
-			#print "close_callback live decremented: " . $self->{livecon} . "\n";
 		};
 
 		$self->{clients}->{$cid}->{host} = $host;	
@@ -124,7 +122,7 @@ sub listen {
 				# think, essentially ignore this
 				if ($self->{clients}->{$cid}) {
 					$self->{clients}->{$cid}->{proto}->on_client_disconnect();	
-					$self->{application}->remote_closed($host, $port, $fh);
+					$self->{application}->remote_closed($host, $port, $cid);
 
 					# the proto disconnect handler can potentially 
 					# tickle close_callback, above, in which case
@@ -132,7 +130,6 @@ sub listen {
 					if ($self->{clients}->{$cid}) {
 						delete $self->{clients}->{$cid};
 						$self->{livecon} -= 1;
-						# print "on_error live decremented: " . $self->{livecon} . "\n";
 					} else { 
 						 print "feels like close_callback closed socket already\n";
 					}
@@ -140,9 +137,8 @@ sub listen {
 			},
 			on_eof => sub {
 				# we notify our application and our protocol of the closed connection
-				print "on eof classback!\n";
 				$self->{clients}->{$cid}->{proto}->on_client_disconnect();	
-				$self->{application}->remote_closed($host, $port, $fh);
+				$self->{application}->remote_closed($host, $port, $cid);
 
 				# see comment above- on_client_disconnect may have
 				# already done this stuff:
@@ -157,12 +153,13 @@ sub listen {
 		$self->{clients}->{$cid}->{proto}->{handle} = $self->{clients}->{$cid}->{handle};
 
 		# alert application to new connection
-		$self->{application}->new_connection($host, $port);
+		$self->{application}->new_connection($host, $port, $cid);
 
 		# start the protocol ball rolling.
 		$self->{clients}->{$cid}->{proto}->on_client_connect();	
 	}, sub {
 		my ($fh, $thishost, $thisport) = @_;
+		print "server listening on $thishost $thisport\n";
 	};
 
 	weaken $self;
@@ -193,7 +190,6 @@ sub client_callback {
 	foreach my $writable (@$w) {
 		my $m = $self->{application}->get_data($writable);
 		while ($m) {
-			#print "did i get data? $m\n";
 			$self->{clients}->{ $writable }->{proto}->frame($m);
 			$m = $self->{application}->get_data($writable);
 		}
