@@ -4,7 +4,6 @@ use strict;
 use Sisyphus::Proto::Trivial;
 use AnyEvent::Strict;
 use Sisyphus::Connector;
-use Devel::Leak;
 use Scalar::Util qw/ weaken /;
 
 my $c = Sisyphus::Connector->new();
@@ -30,9 +29,6 @@ weaken(my $wc = $c);
 $c->connect(sub{
 	my $n = 0;
 
-	my $count = Devel::Leak::NoteSV($handle);
-	print "count: $count\n";
-
 	while ($n < 1000) {
 		$wc->send("hi there");
 		print "!";
@@ -43,7 +39,4 @@ $c->connect(sub{
 });
 
 $cv->recv;
-print "about to count...\n";
 
-my $count = Devel::Leak::CheckSV($handle);
-print "count now $count\n";

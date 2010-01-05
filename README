@@ -5,12 +5,9 @@ Sisyphus is a framework for creating event-centric network applications.
 Track issues at http://circl.lighthouseapp.com/projects/41102-sisyphus
 
 At its core is the AnyEvent library. It tries to abstract away all socket
-handling code. The developer specifies a protocol (or uses an existing 
-protocol module), and couples that with an application module, which is
-passed discrete message bodies as created by the protocol handler.
-
-Sisyphus is very much in early development status, but is good enough for
-development and shows promise. 
+handling code. The developer specifies a protocol, and couples that with
+an application module, which is passed discrete message bodies as created
+by the protocol handler.
 
 INSTALLATION
 
@@ -33,11 +30,11 @@ rather do that by hand, a list of dependencies exists at the top of
 Makefile.PL.
 
 A note on installing EV: on Ubuntu 9.04 and 9.10, at least, installation 
-FAILS if you answer:
+FAILS if you answer yes to:
 
 	Skip further questions and use defaults (y/n)? [y] (ANSWER NO)
 
-with the affirmative. Answer 'n' (NO), then accept all the defaults until
+Answer 'n' (NO), then accept all the defaults until
 
 	Enable inotify support (y/n)? [y] (ANSWER NO)
 
@@ -55,28 +52,11 @@ You should also enable network logging on your syslog. On Ubuntu 9.10, edit
 	$ModLoad imtcp
 	$InputTCPServerRun 514
 
-
 SUPPORT AND DOCUMENTATION
 
-After installing, you can find documentation for this module with the
-perldoc command.
+A quick intro exists in INTRO.pod. Perdoc is used in some modules.
 
-    perldoc Sisyphus
-
-You can also look for information at:
-
-    RT, CPAN's request tracker
-        http://rt.cpan.org/NoAuth/Bugs.html?Dist=Sisyphus
-
-    AnnoCPAN, Annotated CPAN documentation
-        http://annocpan.org/dist/Sisyphus
-
-    CPAN Ratings
-        http://cpanratings.perl.org/d/Sisyphus
-
-    Search CPAN
-        http://search.cpan.org/dist/Sisyphus
-
+Track issues at http://circl.lighthouseapp.com/projects/41102-sisyphus
 
 COPYRIGHT AND LICENCE
 
