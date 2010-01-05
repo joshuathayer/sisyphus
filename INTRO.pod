@@ -1,0 +1,354 @@
+=head1 NAME
+
+INTRO - an introductory tutorial to Sisyphus.
+
+=head1 An Introduction to Sisyphus
+
+Sisyphus is a library for writing event-based network programs. It aims to
+provide an easy way to implement protocols, and to develop applications which
+run atop those protocols. 
+
+=head1 Protocols vs Applications
+
+A typical Sisyphus program will make use of a Protocol module and an Application
+module.  The goal is to logically separate network wrangling and protocol state
+machines from application code, and to foster the ease of migrating applications
+from protocol to protocol.
+
+A Protocol module packages bytes presented to it by the underlying AnyEvent
+libraries into discrete messages, and passes those messages to the Application
+module.  The Application is able to pass messages to the Protocol module, which
+then uses the AnyEvent library to put bytes on the network.
+
+For example, an HTTP Protocol module might implement HTTP by creating a listener
+which consumes bytes passed to it by AnyEvent, keeping state and parsing the
+byte stream into valid HTTP requests. Those requests are then packaged up into a
+Request objects, and those objects are made available to the Application.  In
+addition, the HTTP Protocol module provides a method that accepts some
+Response object as an argument, then serializes the message into a valid HTTP
+response and sends it across the wire.
+
+An Application module receives discrete messages from the Protocol module. It
+would process the message however it needs to, and is able to present discrete
+messages to the Protocol module with the confidence that those messages will be
+properly serialized and sent along to the network peer.
+
+=head1 The Protocol Object
+
+When used in both client and server contexts, Sisyphus is responsible for
+instantiating the protocol object at connection time. It populates the object
+with some useful instance variables, chief among them C<$self-E<gt>{handle}>: a
+reference to the AnyEvent::Handle instance associated with the connection
+that's just been made. C<$self-E<gt>{handle}> is the connection between a
+Sisyphus Protocol and the underlying AnyEvent library, and how data passes
+between Sisyphus and AnyEvent. 
+
+Sisyphus sets also sets C<$self-E<gt>{app_callback}> in the Protocol module at
+instantiation time. In a "server" (more accurately a "Listener") context,
+C<$self-E<gt>{app_callback}> is a coderef to a method in the Application module
+responsible for consuming messages as packaged by the Protocol. In a
+"Connector" context, C<$self-E<gt>{app_callback}> should be set by the programmer
+to be a coderef to a function that should accept packaged messages from the
+Protocol.
+
+=head1 Protocol Implementation
+
+Protocols are implemented by writing a few specially-named methods in a perl
+module. Both 'client' and 'server' methods are written in the same module.
+
+=head2 Server Methods
+
+=over
+
+=item on_client_connect()
+
+Called when a client connection is made. 
+
+=item on_client_disconnect()
+
+Called when a client disconnects, to allow any cleanup needed in the protocol
+module.
+
+=back
+
+=head2 Client Methods
+
+=over
+
+=item on_connect()
+
+Called once a connection is made to the remote server.
+
+=back
+
+=head2 Shared Methods
+
+=over
+
+=item frame()
+
+An entry point in to the Protocol for the Applicaion module, can be called at
+any time by an Application module or client code to send data to the remote
+peer.
+
+=back
+
+=head1 Protocol Example
+
+Let's go over a simple protocol. In the Sisyphus source, you'll find
+Sisyphus::Proto::Trivial. It implements a simple protocol descibed thusly:
+
+A TCP connection is made between peers. At any time, either peer may send a
+message. There is no state implied by the Protocol. All state must be
+implemented by the Application using the Protocol. Messages may not be
+multiplexed- when one message starts, the entire message must be sent. Messages
+are in the form
+
+    |- header -|--------- body ---------|
+
+The header is 5 bytes: 8 bits of version information and 32 bits representing
+the length of the body. Immediately following comes the body, with exactly the
+number of bytes indicated in the header.
+
+=head2 Listener Methods
+
+    sub on_client_connect {
+        my $self = shift;
+        $self->receive_message_length();
+    }
+
+    sub on_client_disconnect {
+        print "client disconnected.\n";
+    }
+
+As the names suggest, on_client_connect and _disconnect are called when a client
+connects or disconnects. Clearly, we don't do much in the case of disconnection,
+but on connection we make a call to our C<receive_message_length> method. As
+we'll see, that methods simply installs a callback to be run once our header
+is read.
+
+=head2 Connector Method
+
+    sub on_connect {
+        my ($self, $cb) = @_;
+        $self->receive_message_length();
+        $cb->();
+    }
+
+The "client" connection callback is a litte more interesting. We're passed a
+coderef to be called once our connection setup is done- this allows us to do
+potentially long-duration things in our on_connect method. In this case, we're
+just going to install the same callback we did in our Listener- recall that
+the protocol is really the same for both clients and servers. We then call our 
+callback, indicating to the client code that the connection is ready for
+action.
+
+=head2 Shared Methods
+
+In addition to the C<frame> method mentioned above, TrivialProto has identical
+client and server behavior and thus can share most protocol-driving code. 
+C<receive_message_length> starts driving the protocol when any data appears on
+the wire, and is called by both client and server "connection" callbacks,
+as outlined above.
+
+    sub receive_message_length {
+        my $self = shift;
+        weaken $self;
+        $self->{handle}->push_read (
+            chunk => 5,
+            sub {
+                my ($handle, $data) = @_;
+                # we have 5 bytes of header:
+                # 8 bits of version, 32 bits of body length
+                my ($v, $len) = unpack("CV", $data);
+                $self->receive_message($len);
+            }
+        );
+    }
+
+There are a few things going on here. The first thing to notice is that 
+the method is completely non-blocking. When C<on_connect> and C<on_client_connect>
+call C<receive_message_length>, the call returns immediately to the caller. We
+are setting up a callback within C<$self-E<gt>{handle}>, an instance of 
+AnyEvent::Handle. In this case, we're setting up a "chunk" callback- the
+Handle object will execute our callback once it has exactly 5 bytes of data
+to give. Those 5 bytes will be our header, and tell us how much data we're
+going to need to read to get the forthcoming body.
+
+Note too that we weaken the ref to C<$self>. Since our callback has a reference
+to C<$self> (in the form of C<$self-E<gt>receive_message()>, a circular reference
+is created and must be delt with. 
+
+Finally, our "chunk" callback calls C<$self-E<gt>receive_message> once the header is
+read and we know how much body we expect to read.
+
+    sub receive_message {
+        my ($self, $len) = shift;
+        weaken $self;
+        $self->{handle}->push_read (
+            chunk => $len,
+            sub {
+                my ($handle, $data) = @_;
+                $self->{app_callback}->($data);
+                $self->receive_message_length();
+            },
+        );
+    }
+
+Again, the call to C<receive_message> returns immediately to the caller after
+setting up a callback from the Handle object to execute once C<$len> bytes of
+data have been read. The callback simply gives the data untouched to the
+application, via the C<$self-E<gt>{app_callback}> coderef as mentioned above. The
+protocol then gets ready for the next message by installing the header-reading
+callback via the call to C<$self-E<gt>receive_message_length>.
+
+Finally, the mandated C<frame> method:
+
+    sub frame {
+        my ($self, $scalar) = @_;
+	my $len = length($scalar);
+	$self->{handle}->push_write( pack("CV", VERSION, $len) );
+        $self->{handle}->push_write( $scalar );
+    }
+
+That's all there is to it. We are passed the data we wish to send. We find the 
+length of it, then pack the VERSION and legnth into a 5-byte blob and push that
+over the wire. Then we push the data we were to send. That implements the
+protocol as it's defined above. Note that the push_write call on the handle
+object is nonblocking and will return to the calling code immediately. 
+
+Those six methods define a complete (if very trivial) protocol for clients and
+servers, and provide hooks into it for Applications to use.
+
+=head1 The Application Object
+
+A server written using the Sisyphus library requires an Application module,
+which hands messages to (and is handed messages by) the Protocol module.
+Sisyphus instantiates one Application object at server startup time. All 
+requests from all connections are presented to this one Applicaion instance.
+The application is presented with discrete messages (or objects) from the
+protocol instance, along with some identifying information about the remote
+peer which sent the message.
+
+The Application processes the messages presented to it, and at any time is
+able to signal to Sisyphus that it has data available for a peer by calling 
+its C<$self-E<gt>{client_callback}> coderef, which is installed by 
+Sisyphus at instantiation time. Sisyphus will then call the Application's
+C<get_data> method, which should return whatever data it wishes to send to 
+the peer. See the example below.
+
+=head1 Application Implementation
+
+Application modules must implement a few methods.
+
+=over
+
+=item new_connection()
+
+Called by Sisyphus when a client connection is made. Passed the host and port
+of the remote peer, and a string which may be used to identify the client
+(really just the concatenation "$host:$peer").
+
+=item remote_closed()
+
+Called by Sisyphus when a client closes the connection. Same arguments as 
+C<new_connection>.
+	
+=item message()
+
+Called by Sisyphus when the Protocol module wants to pass a message from the 
+remote peer to the Application. This is how data makes it off the network
+into your app. Passed the remote host and port, the 'client ID', and an
+arrayref of message objects (or scalars, or whatever the Protocol module
+passes. Read the docs of your protocol module).
+
+=item get_data()
+
+Called by Sisyphus when it wants to get data from your app to pass to the
+remote peer. This is how data gets back to the client.
+
+=back
+
+=head1 Application Example
+
+To demonstrate a simple Sisyphus application, let's look at
+bin/ExampleJSONApplication. This happens to be an app written for the JSON
+protocol (lib/Sisyphus/Proto/JSON.pm), which sends and receives JSON objects 
+over the wire, and hands off (and expects to receive) perl hashrefs from its
+application. Our example looks for a "body" hash element, reverses whatever it
+finds there, and returns that string back to the caller along with the count of
+the number of requests its handled since startup.
+
+    sub new_connection {
+        my ($self, $host, $port, $cid) = @_;
+        $self->{responses}->{$cid} = [];
+    }
+
+    sub remote_closed {
+        my ($self, $host, $port, $cid) = @_;
+        delete $self->{responses}->{$cid};
+    }
+
+On client connection, we set up a place for pending responses to be stored. 
+Since we'll be handling the responses for many connections concurrently, we 
+need to keep track of what responses are for what connection. We use the $cid
+for this, since we'll be passed that by Sisyphus for all calls that relate to
+fetching responses, and it serves to identify each connection.
+
+On client disconnection, we destroy the outgoing message queue, since it is 
+no longer needed.
+
+    sub message {
+        my ($self, $host, $port, $message, $cid) = @_;
+
+        $request_count += 1;
+
+        my $obj = $message->[0];
+        my $body = $obj->{'body'};
+
+        my $response = {
+            request_number => $request_count,
+            body => scalar reverse $body,
+        };
+
+        push(@{$self->{responses}->{$cid}}, $response);
+        $self->{client_callback}->([$cid]);
+    }
+
+When our protocol has a complete message, it lets Sisyphus know and Sisyphus
+calls this method in our Application. Multiple messages might be sent at once,
+so we get an arrayref (in this example, we assume we only get one message). Our
+JSON Protocol implementation hands us hashrefs corresponding to the JSON that
+went over the wire. Our simple application looks for a "body" element, then 
+creates a response object (really just a hash) that contains the reversed value
+of the scalar that was in 'body', along with the count of messages the App has
+seen. It throws the response into the App's response buffer for this connection
+(again using $cid), and notifies Sisyphus of an available response by calling
+the client_callback function with the $cid (note that multiple notifications
+can be sent at once by putting multiple $cids in the array).
+
+    sub get_data {
+        my ($self, $cid) = @_;
+        return(pop(@{$self->{responses}->{$cid}{));
+    }
+
+After Sisyphus gets notification of available data, it calls the get_data method
+with the appropriate $cid. We simply pop off the most recent response and return it;
+Sisyphus will handle sending that along to our Protocol module for proper
+formatting to be sent over the network.
+
+=head1 Listeners vs Connectors
+
+Network applications can listen for socket connections, initiate socket
+connections, or do both. A Sisyphus application which listens for connections
+would want an instance of the Sisyphus::Listener. A "connecting" application
+wants to use Sisyphus::Connector. 
+
+XXX more later!
+
+=head1 Connection Pools
+
+Sisyphus also provides a connection pool object, which maintains a pool of 
+Sisyphus::Connection objects.
+
+XXX more later!
