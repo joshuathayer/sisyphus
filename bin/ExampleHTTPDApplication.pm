@@ -35,7 +35,7 @@ sub remote_closed {
 # passed the host and port of the requesting machine,
 # and an array of data as passed by the protocol module
 sub message {
-	my ($self, $host, $port, $dat, $fh) = @_;
+	my ($self, $host, $port, $dat, $fh, $stash) = @_;
 
 	my $req = $dat->[0];
 
@@ -56,6 +56,7 @@ sub message {
 	# if so, indicate there is something to respond with
 
 	my $ret = "<html><head><title>example</title></head><body>";
+	$ret .= "<h1>the server says &quot;$stash->{outgoing_message}&quot</h1>";
 	$ret .= "Params<br><pre>";
 	$ret .= Dumper $params;
 	$ret .= "</pre>";

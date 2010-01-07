@@ -23,6 +23,7 @@ $c->{app_callback} = sub {
 
 $c->connect(sub{
 	my $message = {
+		set_message => 1,
 		body => "hello world",
 	};
 

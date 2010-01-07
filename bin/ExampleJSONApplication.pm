@@ -26,12 +26,16 @@ sub remote_closed {
 }
 
 sub message {
-	my ($self, $host, $port, $message, $cid) = @_;
+	my ($self, $host, $port, $message, $cid, $stash) = @_;
 
 	$request_count += 1;
 
 	my $obj = $message->[0];	
 	my $body = $obj->{'body'};
+
+	if ($obj->{set_message}) {
+		$stash->{outgoing_message} = $obj->{body};
+	}
 
 	my $response = {
 		request_number => $request_count,

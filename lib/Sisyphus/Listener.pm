@@ -53,6 +53,7 @@ sub new {
 		livecon => 0,
 		clients => {},
 		outbufs => {},
+		stash => {},
 	};
 
 	return(bless($self, $class));
@@ -176,7 +177,7 @@ sub app_callback {
 
 	#Devel::Cycle::find_cycle($self);
 
-	$self->{application}->message($host, $port, \@dat, $fh);
+	$self->{application}->message($host, $port, \@dat, $fh, $self->{stash});
 }
 
 # called at any time by our Application instance. indicates app has data ready 
