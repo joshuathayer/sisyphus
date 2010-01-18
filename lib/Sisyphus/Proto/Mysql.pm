@@ -87,8 +87,6 @@ sub receive_response_header {
    	my $rc;
    	$self->{packet} = undef;
 
-	$self->{log}->log("in receive_response_header");
-
    	# four byte header, which include the length of the body    
 	$handle->push_read(
 		chunk => 4,
@@ -102,8 +100,6 @@ sub receive_response_header {
 			} elsif ($rc > 0) {
 				$self->{packet} = $_packet;
 				my $size = $self->{packet}->{packet_size};
-				#print STDERR "looks like $size byte packet.\n";
-				$self->{log}->log("looks like a $size byte packet");
 				$self->receive_response_body();
 			}
 		}
@@ -279,7 +275,7 @@ sub query {
 	my $packet_body = mysql_encode_com_query $q;
 	my $packet_head = mysql_encode_header $packet_body;
 
-	$self->{log}->log("in query, in_q is $self->{in_q}");
+	# $self->{log}->log("in query, in_q is $self->{in_q}");
 
 	push(@{$self->{queryqueue}}, {
 		cb => $args->{cb},
@@ -295,7 +291,7 @@ sub query {
 sub service_queryqueue {
 	my $self = shift;
 
-	$self->{log}->log("servicing queryqueue");
+	# $self->{log}->log("servicing queryqueue");
 	my $item = pop(@{$self->{queryqueue}});
 	my $cb = $item->{cb};
 
@@ -304,13 +300,13 @@ sub service_queryqueue {
 		$self->{cqid} = $item->{cqid};
 		$self->{cb} = $cb;
 
-		$self->{log}->log("popped item from query queue, sending to mysql");
+		# $self->{log}->log("popped item from query queue, sending to mysql");
 
 		# send actual query packets to mysql server
 		$self->send_packet($item->{head}, $item->{body});
 	} else {
 		$self->{in_q} = undef;
-		$self->{log}->log("query queue empty, in_q set to undef");
+		# $self->{log}->log("query queue empty, in_q set to undef");
 	}
 }
 

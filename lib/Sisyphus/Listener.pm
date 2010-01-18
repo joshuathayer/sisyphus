@@ -92,7 +92,9 @@ sub listen {
 		$self->{clients}->{$cid}->{proto} = $self->{protocol}->new();
 
 		# how the proto gets messages to the app
-		$self->{clients}->{$cid}->{proto}->{app_callback} = sub { $self->app_callback($cid, @_) };
+		$self->{clients}->{$cid}->{proto}->{app_callback} = sub {
+			$self->app_callback($cid, @_)
+		};
 
 		# how protocol-triggered socket closures get bubbled back to me
 		# protocol calls $self->{close_callback}->() 
