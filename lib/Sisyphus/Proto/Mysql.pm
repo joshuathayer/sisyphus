@@ -172,13 +172,12 @@ sub receive_response_body {
 						$self->{on_error}->("bad credentials?"); return;
 						$self->service_queryqueue();
 					} elsif ($self->{packet}->{end}) {
-						#print STDERR "ok got field_end\n";
+                        # print STDERR "ok got field_end\n";
 						$self->{field_end} = $self->{packet};
 						$self->receive_response_header();
 					} else {
 						#do_something_with_field_metadata($packet);
-						#print STDERR "i got field metadata\n";
-						#print Dumper $packet;
+                        $self->{fields}->{ $self->{packet}->{name} } = $self->{packet};
 						$self->receive_response_header();
 					}
 				}
@@ -286,6 +285,11 @@ sub query {
 	#print Dumper $self->{queryqueue};
 
 	unless ($self->{in_q}) { $self->service_queryqueue(); }
+}
+
+sub fields {
+    my $self = shift;
+    return $self->{fields};
 }
 
 sub service_queryqueue {

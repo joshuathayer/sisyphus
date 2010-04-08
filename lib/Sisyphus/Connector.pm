@@ -122,8 +122,6 @@ sub connect {
 			return;
 		};
 
-		$self->{log}->log("i feel connected.");
-
 		$self->{protocol} = Sisyphus::Proto::Factory->instantiate($self->{protocolName}, $self->{protocolArgs});
 		unless (ref($self->{protocol})) {
 			$self->{log}->log("could not instantiate protocol " . $self->{protocolName});
@@ -142,7 +140,6 @@ sub connect {
 		# call protocol's "on_connect" function, which initiates 
 		# and starts the handler
 		$self->{protocol}->on_connect( sub {
-			$self->{log}->log("in Connector's on_connect callback, now... yay");
 
 			$cb->($self);
 		} );

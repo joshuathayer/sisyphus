@@ -187,19 +187,19 @@ sub claim {
 		$cb->(undef);
 	}
 
-	$self->{log}->log(scalar(keys(%{$self->{freepool}})) . " connections available");
+	#$self->{log}->log(scalar(keys(%{$self->{freepool}})) . " connections available");
 
 	my @c = values(%{ $self->{freepool} });
 	my $c = $c[0];
 
 	delete $self->{freepool}->{ $c->{id} };
-	$self->{log}->log(scalar(keys(%{$self->{freepool}})) . " connections available");
+	#$self->{log}->log(scalar(keys(%{$self->{freepool}})) . " connections available");
 
 	$c->{state} = "claimed";
 
-	$self->{log}->log(ref($c));
-	$self->{log}->log(ref($c->{connection}));
-	$self->{log}->log(ref($c->{protocol}));
+	# $self->{log}->log(ref($c));
+	# $self->{log}->log(ref($c->{connection}));
+	# $self->{log}->log(ref($c->{protocol}));
 
 	$cb->($c);
 }
