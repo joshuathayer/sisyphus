@@ -163,6 +163,9 @@ sub listen {
 	}, sub {
 		my ($fh, $thishost, $thisport) = @_;
 		print "server listening on $thishost $thisport\n";
+
+        # per anyevent::socket dox, we return the length of our listening queue
+        return 200;
 	};
 
 	weaken $self;

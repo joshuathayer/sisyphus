@@ -22,7 +22,7 @@ sub new {
 	my $self  = { @_ };
 	bless $self, $class;
 
-	($self->{request_timeout} = 2) unless defined $self->{request_timeout};
+	($self->{request_timeout} = 60) unless defined $self->{request_timeout};
 
 	return $self
 }
@@ -46,6 +46,8 @@ sub on_client_connect {
 		# it indirectly triggers a "disconnect" event (via do_disconnect).
 		# we need to let our Listener know of the closed connection, so it 
 		# can do its own cleanup
+        # 20100611 sayulita: this means that anyevent automatically closes
+        # each connetion after sending a response
 		disconnect => sub {
 			my ($self, $err) = @_;
 
@@ -115,6 +117,12 @@ sub request {
 sub frame {
 	my ($self, $r) = @_;
 	my ($code, $msg, $hdr, $content) = @$r;
+
+#unless (defined ($hdr->{'Content-Length'})) {
+#       $hdr->{'Content-Length'} = length($content);
+#   }
+    # always do connection: close
+    $hdr->{'Connection'} = "close";
 
 	$self->response($code, $msg, $hdr, $content);
 }
