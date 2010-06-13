@@ -79,8 +79,10 @@ sub new {
 sub onError {
 	my ($self, $err) = @_;
 
-	$self->{connected} = undef;
 	$self->{log}->log("error on connection with $self->{host}:$self->{port}. connection considered closed.");
+
+	$self->{connected} = undef;
+	$read_watcher = undef;
 }
 
 sub serverClosed {
@@ -105,6 +107,17 @@ sub connectSync {
 	);
 
 	$cv->recv;
+}
+
+# disconnect, etc
+sub reset {
+    my ($self) = @_;
+
+	$self->{log}->log("disconnecting from $self->{host}, $self->{port}");
+    delete $self->{fh};
+    delete $self->{protocol};
+    $self->{connected} = 1;
+
 }
 
 sub connect {
@@ -140,7 +153,6 @@ sub connect {
 		# call protocol's "on_connect" function, which initiates 
 		# and starts the handler
 		$self->{protocol}->on_connect( sub {
-
 			$cb->($self);
 		} );
 	};
