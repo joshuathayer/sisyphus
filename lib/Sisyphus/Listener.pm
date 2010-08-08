@@ -168,7 +168,7 @@ sub listen {
         return 200;
 	};
 
-	weaken $self;
+    #weaken $self;
 	#Devel::Cycle::find_cycle($self);
 }
 
