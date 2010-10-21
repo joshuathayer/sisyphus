@@ -6,15 +6,19 @@ package Sislog;
 
 use strict;
 use AnyEvent;
-use IO::AIO;
 use AnyEvent::AIO;
 use Fcntl;
-use Log::Syslog::Fast ':all';
 use Sys::Hostname;
 
-# tie me up
-#tie(*STDOUT, 'Sislog', { facility => "stdout", use_syslog => 1, }); 
-#tie(*STDERR, 'Sislog', { facility => "stderr", use_syslog => 1, }); 
+my $has_syslog = undef;
+
+# per http://www.codingforums.com/archive/index.php/t-123477.html
+# use Log::Syslog::Fast if we have it
+BEGIN {
+    eval { use Log::Syslog::Fast ':all'; } and do {
+        $has_syslog = 1 if !$@;
+    };
+} 
 
 my @wbuf;
 
@@ -24,9 +28,15 @@ sub new {
 
  	my $facility =  $in->{facility} || "SET_FACILITY_IN_SISLOG_OBJECT";
 	my $use_syslog = $in->{use_syslog};
+
+    #$use_syslog &&= $has_syslog;
+    if ($use_syslog and !$has_syslog) {
+        warn("requested syslog, but Log::Syslog::Fast not installed.");
+        $use_syslog = 0;
+    }
 	
 	my $self = {
-		use_syslog => $in->{use_syslog},
+		use_syslog => $use_syslog,
 		facility => $facility,
 		fn => undef,
 		fh => undef,
@@ -124,7 +134,6 @@ sub service {
 
 sub rotate {
 	# implement me, please
-
 }
 
 1;

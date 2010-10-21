@@ -20,7 +20,6 @@ sub message {
 
 sub new_connection {
 
-
 	print STDERR "application doesn't implement new_connection() method\n";
 
 }

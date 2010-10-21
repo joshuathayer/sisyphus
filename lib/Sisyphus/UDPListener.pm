@@ -6,7 +6,6 @@ use AnyEvent::Handle;
 use Data::Dumper;
 use Scalar::Util qw/ weaken /;
 use IO::Socket;
-use Devel::Cycle;
 
 =head1 NAME
 
