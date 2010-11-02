@@ -50,6 +50,7 @@ sub new {
 		protocol => undef,
 		application => undef,
 		stash => {},
+		name => '',
 	};
 
 	return(bless($self, $class));
@@ -71,23 +72,21 @@ sub listen {
 	# much stolen from AnyEvent::DNS.
 	weaken(my $wself = $self);
 
-	# set up application's client_callback. this is how the application lets
-	# us know of data ready to send
-	$self->{application}->{client_callback} = sub {
-		$self->client_callback(@_)
-	};
+	$self->{application}->register_listener($self);
 
-	# we will feed bytes into this instance...
+	# we will feed bytes into this protocol instance...
 	$self->{proto} = $self->{protocol}->new();
 
 	# ...and it will let us know of messages for our application via this
-	$self->{proto}->{app_callback} = sub { $self->app_callback(@_) };
+	$self->{proto}->{app_callback} = sub { $self->send_app_message(@_) };
 
 	my $sock = IO::Socket::INET->new(
 		LocalAddr => $self->{ip},
 		LocalPort => $self->{port}, 
+		Broadcast => 1,
+		Blocking => 0,
+		ReuseAddr => 1,
 		Proto => 'udp') or die "socket: $@";
-
 
 	$self->{rw} = AE::io $sock, 0, sub {
 		if (my $peer = recv $sock, my $pkt, 4096, 0) {
@@ -97,6 +96,8 @@ sub listen {
 		}
 	};
 
+	warn Dumper $self->{rw};
+
 	print "UDP server listening on $self->{ip}:$self->{port}\n";
 }
 
@@ -104,9 +105,32 @@ sub listen {
 # to the application. it's passed:
 # origin $host, origin $port, $data
 # we wish to also send our app a ref to our 'stash'
-sub app_callback {
-	my $self = shift;
-	$self->{application}->message(@_, $self->{stash});
+# and also the callback the application can call when it has data to send
+sub send_app_message {
+	my ($self, $host, $port, $dat) = @_;
+
+	if ($self->{interface}) {
+		$self->{interface}->message($host, $port, $dat, "udp", $self->{stash}, sub {
+			my ($dat) = @_;
+			$self->{application}->message($host, $port, $dat, "udp", $self->{stash}, $self);
+		});
+		return;
+	}
+
+	$self->{application}->message($host, $port, $dat, "udp", $self->{stash}, $self);
+}
+
+
+
+sub client_callback {
+	my ($self, $w) = @_;
+	foreach my $writable (@$w) {
+		my $m = $self->{application}->get_data($writable);
+		while($m) {
+			warn("i have a message for $writable: " . Dumper $m);
+			$m = $self->{application}->get_data($writable);
+		}
+	}
 }
 
 =head1 AUTHOR

@@ -6,18 +6,25 @@ package Sislog;
 
 use strict;
 use AnyEvent;
-use AnyEvent::AIO;
 use Fcntl;
 use Sys::Hostname;
+use Carp;
 
 my $has_syslog = undef;
+my $has_AIO = undef;
 
 # per http://www.codingforums.com/archive/index.php/t-123477.html
 # use Log::Syslog::Fast if we have it
 BEGIN {
-    eval { use Log::Syslog::Fast ':all'; } and do {
-        $has_syslog = 1 if !$@;
-    };
+
+	#eval { require Log::Syslog::Fast ':all'; 1; } and do {
+	eval "use Log::Syslog::Fast ':all'; 1" and do {
+		$has_syslog = 1 if !$@;
+	};
+
+	eval { require AnyEvent::AIO; 1; } and do {
+		$has_AIO = 1 if !$@;
+	};
 } 
 
 my @wbuf;
@@ -65,6 +72,7 @@ sub PRINT {
 sub open {
 	my $self = shift;
 
+	no strict 'subs'; # complaints in situations where we don't have Syslog::Fast
 	if ($self->{use_syslog}) {
 		$self->{syslog} = Log::Syslog::Fast->new(
 			LOG_UDP,
@@ -76,15 +84,20 @@ sub open {
 			$self->{facility});
 		return;
 	}
+	use strict;
 
-	my $cv = AnyEvent->condvar;
-	aio_open $self->{fn}, O_WRONLY|O_CREAT|O_APPEND, 0666, sub {
-		$self->{fh} = $_[0];
-		unless ($self->{fh}) { print STDERR "error opening log file $self->{fn}\n"; }
-		$cv->send();
-	};
+	if ($self->{has_AIO}) {
+		my $cv = AnyEvent->condvar;
 
-	$cv->recv;
+		aio_open $self->{fn}, O_WRONLY|O_CREAT|O_APPEND, 0666, sub {
+			$self->{fh} = $_[0];
+			unless ($self->{fh}) { print STDERR "error opening log file $self->{fn}\n"; }
+			$cv->send();
+		};
+
+		$cv->recv;
+	}
+
 }
 
 sub log {
@@ -105,9 +118,14 @@ sub log {
 	my $time = "$year/$mon/$mday $hour:$min:$sec.$usec";
 
 	my $line = "$id $time $dat\n";
-	push @wbuf, $line;
 
-	unless($self->{in_write}) { $self->service(); }
+	if ($self->{has_aio}) {
+		push @wbuf, $line;
+		unless($self->{in_write}) { $self->service(); }
+	} else {
+		print STDERR $line;
+	}
+
 }
 
 sub service {

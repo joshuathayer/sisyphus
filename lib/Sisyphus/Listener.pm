@@ -6,6 +6,8 @@ use Data::Dumper;
 use Scalar::Util qw/ weaken /;
 #use Devel::Cycle;
 
+use constant DEBUG => 1;
+
 =head1 NAME
 
 Sisyphus::Listener - Listener side of Sisyphus framework
@@ -54,6 +56,7 @@ sub new {
 		clients => {},
 		outbufs => {},
 		stash => {},
+		name => '',
 	};
 
 	return(bless($self, $class));
@@ -74,26 +77,44 @@ sub listen {
 
 	# set up application's client_callback. this is how the application lets
 	# us know of data ready for our clients
-	$self->{application}->{client_callback} = sub { $self->client_callback(@_) };
+	#$self->{application}->{client_callback} = sub { $self->client_callback(@_) };
+
+	# jt 10/2010- no longer the case. when we call message() in the application,
+	# we pass along the callback then. so we can support one application instance
+	# across multiple listener instances (to support multiple protocols in one app)
+
+	# actually no. we notify our application that is has a new listener, and let the 
+	# application give us a sub to call when we have data for it
+	#$self->{application_message_callback} = $self->{application}->register_listener($self);
+
+	# no, no. we pass a ref to ourself in the call to register_listener,
+	# so the app has a ref to us and our client_callback so it can send 
+	# messages through us whenever it wants to. also, we send a ref to
+	# ourself when we call message(), so it knows who to send messages
+	# back through
+	$self->{application}->register_listener($self);
 
 	tcp_server $self->{ip}, $self->{port}, sub {
 		my ($fh, $host, $port) = @_;
 
+		my $cid = "$host:$port";
+		warn("a new connection, ID $cid") if DEBUG;
+
 		$self->{livecon} += 1;
 
-		my $cid = "$host:$port";
-
 		if ($self->{clients}->{$cid}) {
-			print "huh, data on a socket that should be handled by the handler.\n";
-			return;
+			die("huh, data on a socket that should be handled by an existing handle");
 		}
 
-		# a new connection from a client.
+		warn("instantiating and configuring a new protocol instance for $cid");
+		$self->{clients}->{$cid}->{host} = $host;	
+		$self->{clients}->{$cid}->{port} = $port;	
 		$self->{clients}->{$cid}->{proto} = $self->{protocol}->new();
 
-		# how the proto gets messages to the app
+		# how the proto gets messages to the app. we make this a closure
+		# to enable us to send the cid along to the app.
 		$self->{clients}->{$cid}->{proto}->{app_callback} = sub {
-			$self->app_callback($cid, @_)
+			$self->send_app_message($cid, @_);
 		};
 
 		# how protocol-triggered socket closures get bubbled back to me
@@ -106,9 +127,6 @@ sub listen {
 
 			$self->{livecon} -= 1;
 		};
-
-		$self->{clients}->{$cid}->{host} = $host;	
-		$self->{clients}->{$cid}->{port} = $port;	
 
 		# make the handle
 		$self->{clients}->{$cid}->{handle} = AnyEvent::Handle->new(
@@ -152,7 +170,8 @@ sub listen {
 			},
 		);
 
-
+		# give the proto instance this handle, which it will use to read
+		# from and write to
 		$self->{clients}->{$cid}->{proto}->{handle} = $self->{clients}->{$cid}->{handle};
 
 		# alert application to new connection
@@ -162,41 +181,66 @@ sub listen {
 		$self->{clients}->{$cid}->{proto}->on_client_connect();	
 	}, sub {
 		my ($fh, $thishost, $thisport) = @_;
-		print "server listening on $thishost $thisport\n";
 
-        # per anyevent::socket dox, we return the length of our listening queue
-        return 200;
+		print "server listening on $thishost $thisport\n";
+    # per anyevent::socket dox, we return the length of our listening queue
+    return 200;
 	};
 
-    #weaken $self;
-	#Devel::Cycle::find_cycle($self);
 }
 
 # can be called at any time by a Protocol instance. Asynchronous notification
 # of data available for our Application
-sub app_callback {
-	my ($self, $fh, @dat) = @_;
+sub send_app_message {
+	my ($self, $cid, @dat) = @_;
 
-	my $host = $self->{clients}->{$fh}->{host};
-	my $port= $self->{clients}->{$fh}->{port};
+	my $host = $self->{clients}->{$cid}->{host};
+	my $port= $self->{clients}->{$cid}->{port};
 
-	#Devel::Cycle::find_cycle($self);
+	my $dat = \@dat;
 
-	$self->{application}->message($host, $port, \@dat, $fh, $self->{stash});
+	# apps whih have disparate listeners speaking disparate protocols might
+	# want to normalize messages into a standard format. let that happen here.
+	# take a closer look at params. XXX 10/2010
+	if ($self->{interface}) {
+		$self->{interface}->message($host, $port, $dat, $cid, $self->{stash}, sub {
+			my ($dat) = @_;
+			$self->{application}->message($host, $port, $dat, $cid, $self->{stash}, $self);
+		});
+		return;
+	}
+
+	# we give the app the host, port, and cid at connection time.
+	# we don't need to do that again and again. and, stash is useless
+	# XXX fix that shit
+	# actually no. in the UDP world, it makese sense.
+	$self->{application}->message($host, $port, $dat, $cid, $self->{stash}, $self);
+	# thinking about "message normalization", in servers where there are multiple
+	# listeners and thus multiple potential message formats. we want the call to 
+	# message() to be as simple as possible	
 }
 
 # called at any time by our Application instance. indicates app has data ready 
 # for this client
 sub client_callback {						
-	my $self = shift;
-	my $w = shift;
+	my ($self, $w) = @_;
+
+	warn("here in client_callback") if DEBUG;
 
 	# if we're here, our app has indicated that it has something to send on this 
 	# filehandle!
 	foreach my $writable (@$w) {
+		warn("writable $writable") if DEBUG;
+
 		my $m = $self->{application}->get_data($writable);
 		while ($m) {
-			$self->{clients}->{ $writable }->{proto}->frame($m);
+			if ($self->{interface}) {
+				$self->{interface}->frame($m, sub {
+					$self->{clients}->{ $writable }->{proto}->frame(@_[0]);
+				});
+			} else {
+					$self->{clients}->{ $writable }->{proto}->frame($m);
+			}
 			$m = $self->{application}->get_data($writable);
 		}
 	}
